@@ -1,0 +1,15 @@
+# Der gesamte Betrieb: `docker compose up` (NF_005).
+services:
+  bls:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - bls-daten:/data          # SQLite-Datei + Backups (NF_004)
+    environment:
+      BLS_ADMIN_BENUTZER: verfahren
+      BLS_ADMIN_PASSWORT: ${BLS_ADMIN_PASSWORT:-bls-auswahl}   # für Einsatz per .env setzen!
+    restart: unless-stopped
+
+volumes:
+  bls-daten:

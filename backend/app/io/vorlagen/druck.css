@@ -1,0 +1,36 @@
+/* Druck-Stylesheet für Laufzettel und Raumschilder (F_DM_001/002).
+   Diese Datei ist bewusst editierbar — Layout/Inhalte sind ohne
+   Programmierkenntnisse anpassbar ("Inhalte konfigurierbar"). */
+
+@page {
+  size: A4;
+  margin: 2cm;
+  @bottom-right { content: "Seite " counter(page); font-size: 8pt; color: #666; }
+}
+
+body { font-family: "DejaVu Sans", "Helvetica", sans-serif; font-size: 10.5pt; color: #1c2733; }
+
+.seite { page-break-after: always; }
+.seite:last-child { page-break-after: avoid; }
+
+h1 { font-size: 15pt; color: #1a3e6e; margin: 0 0 2pt; }
+h2 { font-size: 11pt; color: #1a3e6e; margin: 10pt 0 4pt; }
+.untertitel { color: #555; font-size: 9pt; margin-bottom: 12pt; }
+
+table { border-collapse: collapse; width: 100%; margin-top: 6pt; }
+th, td { border: 0.75pt solid #8a94a2; padding: 5pt 7pt; text-align: left; }
+th { background: #eaf0f8; }
+
+.hinweisbox {
+  margin-top: 14pt;
+  border: 0.75pt solid #8a94a2;
+  background: #f5f7fa;
+  padding: 8pt;
+  font-size: 9pt;
+}
+
+/* Raumschilder */
+.raumschild { text-align: center; padding-top: 3cm; }
+.raumschild .raumnummer { font-size: 46pt; font-weight: bold; color: #1a3e6e; }
+.raumschild .tagestitel { font-size: 15pt; margin: 8pt 0 20pt; }
+.raumschild table { font-size: 12pt; }

@@ -1,0 +1,247 @@
+:root {
+  --blau: #1a3e6e;
+  --blau-hell: #eaf0f8;
+  --rot: #b3261e;
+  --rot-hell: #fdecea;
+  --gruen: #1e6e46;
+  --gruen-hell: #e8f5ee;
+  --gelb-hell: #fff7e0;
+  --rahmen: #d5dbe3;
+  --text: #1c2733;
+  --text-schwach: #5c6b7a;
+  --hintergrund: #f5f7fa;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  background: var(--hintergrund);
+  font-size: 14px;
+}
+
+h1, h2, h3 { color: var(--blau); }
+h2 { font-size: 1.2rem; margin: 0 0 0.75rem; }
+h3 { font-size: 1rem; margin: 1rem 0 0.5rem; }
+
+.kopfzeile {
+  background: var(--blau);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 1.2rem;
+}
+.kopfzeile h1 { color: #fff; font-size: 1.05rem; margin: 0; flex: 1; }
+.kopfzeile select {
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  border: none;
+}
+
+.schritte {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.75rem 1.2rem 0;
+  background: #fff;
+  border-bottom: 1px solid var(--rahmen);
+}
+.schritt {
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--rahmen);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: var(--hintergrund);
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: var(--text-schwach);
+}
+.schritt.aktiv {
+  background: #fff;
+  color: var(--blau);
+  font-weight: 600;
+  border-color: var(--blau);
+}
+.schritt:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.inhalt { padding: 1.2rem; max-width: 1400px; margin: 0 auto; }
+
+.karte {
+  background: #fff;
+  border: 1px solid var(--rahmen);
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  margin-bottom: 1rem;
+}
+
+.zeile { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
+.zeile > .karte { flex: 1; min-width: 320px; }
+
+button {
+  background: var(--blau);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+button:hover { filter: brightness(1.15); }
+button:disabled { background: #9aa7b5; cursor: not-allowed; }
+button.sekundaer {
+  background: #fff;
+  color: var(--blau);
+  border: 1px solid var(--blau);
+}
+button.gefahr { background: var(--rot); }
+button.klein { padding: 0.2rem 0.5rem; font-size: 0.8rem; }
+
+input, select {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--rahmen);
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+input[type="number"] { width: 5.5rem; }
+label { display: inline-flex; align-items: center; gap: 0.4rem; }
+.feld { display: flex; flex-direction: column; gap: 0.25rem; }
+.feld span { font-size: 0.8rem; color: var(--text-schwach); }
+
+table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+th, td {
+  border: 1px solid var(--rahmen);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--blau-hell); position: sticky; top: 0; }
+.tabellen-rahmen { max-height: 420px; overflow: auto; border: 1px solid var(--rahmen); }
+
+.hinweis { color: var(--text-schwach); font-size: 0.85rem; }
+.fehler {
+  background: var(--rot-hell);
+  border: 1px solid var(--rot);
+  color: var(--rot);
+  border-radius: 6px;
+  padding: 0.6rem 0.9rem;
+  margin: 0.5rem 0;
+}
+.erfolg {
+  background: var(--gruen-hell);
+  border: 1px solid var(--gruen);
+  color: var(--gruen);
+  border-radius: 6px;
+  padding: 0.6rem 0.9rem;
+  margin: 0.5rem 0;
+}
+.abzeichen {
+  display: inline-block;
+  border-radius: 10px;
+  padding: 0.05rem 0.5rem;
+  font-size: 0.75rem;
+  background: var(--blau-hell);
+  color: var(--blau);
+}
+.abzeichen.rot { background: var(--rot-hell); color: var(--rot); }
+.abzeichen.gruen { background: var(--gruen-hell); color: var(--gruen); }
+.abzeichen.gelb { background: var(--gelb-hell); color: #8a6d00; }
+
+/* Planungsraster */
+.raster-wrap { overflow-x: auto; }
+.raster {
+  position: relative;
+  min-width: 900px;
+}
+.raster-zeile {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--rahmen);
+  min-height: 40px;
+}
+.raster-label {
+  flex: 0 0 170px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  border-right: 1px solid var(--rahmen);
+  background: var(--blau-hell);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.raster-spur { position: relative; flex: 1; background: #fff; }
+.raster-block {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 4px;
+  background: var(--blau-hell);
+  border: 1px solid var(--blau);
+  color: var(--blau);
+  font-size: 0.72rem;
+  padding: 0.1rem 0.3rem;
+  overflow: hidden;
+  cursor: pointer;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.raster-block.gruppe { background: #e7f0e9; border-color: var(--gruen); color: var(--gruen); }
+.raster-block.thesen { background: #f3ecfa; border-color: #6b3fa0; color: #6b3fa0; }
+.raster-block.konflikt { background: var(--rot-hell); border-color: var(--rot); color: var(--rot); font-weight: 700; }
+.raster-block.markiert { outline: 3px solid #f0a500; }
+.raster-zeitachse {
+  display: flex;
+  margin-left: 170px;
+  font-size: 0.7rem;
+  color: var(--text-schwach);
+}
+
+.dialog-hintergrund {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 30, 40, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.dialog {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1.2rem 1.4rem;
+  min-width: 420px;
+  max-width: 640px;
+  max-height: 85vh;
+  overflow: auto;
+}
+
+.anmeldung {
+  max-width: 360px;
+  margin: 12vh auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.kennzahlen { display: flex; gap: 1rem; flex-wrap: wrap; }
+.kennzahl {
+  border: 1px solid var(--rahmen);
+  border-radius: 6px;
+  padding: 0.5rem 0.9rem;
+  background: var(--blau-hell);
+  min-width: 130px;
+}
+.kennzahl b { display: block; font-size: 1.15rem; color: var(--blau); }
+.kennzahl span { font-size: 0.75rem; color: var(--text-schwach); }
+
+ul.konfliktliste { list-style: none; padding: 0; margin: 0; }
+ul.konfliktliste li {
+  border: 1px solid var(--rot);
+  background: var(--rot-hell);
+  border-radius: 6px;
+  padding: 0.5rem 0.7rem;
+  margin-bottom: 0.4rem;
+  cursor: pointer;
+}
+ul.konfliktliste li .regel { font-weight: 700; color: var(--rot); margin-right: 0.5rem; }
