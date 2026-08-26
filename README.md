@@ -72,7 +72,12 @@ backend/app/api/               # REST-Router entlang des 5-Schritte-Workflows
 frontend/                      # React + Vite + TS, deutschsprachige UI
 docs/formats.md                # versionierte CSV-Austauschformate (NF_006)
 docs/regeln.md                 # Regel- und Parameterdokumentation (NF_010)
+docs/offene-punkte.md          # ausstehende Verifikation und offene Entscheidungen
 ```
+
+> **Vor dem Weiterarbeiten:** [`docs/offene-punkte.md`](docs/offene-punkte.md)
+> lesen — die Backend-Suite ist seit dem letzten Fix nicht gelaufen, und die
+> Gegenprobe der Mindestpause steht noch aus.
 
 Scope-Hinweis: Umgesetzt sind ausschließlich Anforderungen der Kennzeichnung
 **27**; „28“-Themen (API-Integrationen, SSO, weitere Access-Ablösung) sind
