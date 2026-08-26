@@ -6,6 +6,7 @@ import type {
   ImportErgebnis,
   PrueferZeile,
   RaumZeile,
+  ResetUmfang,
 } from "../types";
 
 const IMPORTE: { typ: string; titel: string; hinweis: string }[] = [
@@ -58,13 +59,46 @@ export function ImportSchritt({ jahrgangId }: { jahrgangId: number }) {
     }
   };
 
+  /** Import zurücksetzen: erst den Umfang erfragen, dann mit konkreten Zahlen
+   *  rückfragen — der Eingriff ist nicht umkehrbar. */
+  const zuruecksetzen = async (typ: string, titel: string) => {
+    setFehler(null);
+    try {
+      const umfang = await get<ResetUmfang>(
+        `/api/jahrgaenge/${jahrgangId}/import/${typ}/umfang`
+      );
+      const posten = umfang.posten.filter((p) => p.anzahl > 0);
+      if (posten.length === 0) {
+        setFehler(`Zu „${titel}“ ist nichts importiert — nichts zurückzusetzen.`);
+        return;
+      }
+      const zeilen = posten.map((p) => `• ${p.anzahl} ${p.bezeichnung}`).join("\n");
+      const warnung = umfang.plan_verwerfen
+        ? "\n\nDamit werden auch alle berechneten Planungsstände verworfen."
+        : "";
+      if (!window.confirm(
+        `„${titel}“ zurücksetzen?\n\nEndgültig gelöscht werden:\n${zeilen}` +
+        `${warnung}\n\nDas lässt sich nicht rückgängig machen.`
+      )) return;
+      await del(`/api/jahrgaenge/${jahrgangId}/import/${typ}`);
+      setErgebnisse((alt) => {
+        const rest = { ...alt };
+        delete rest[typ];
+        return rest;
+      });
+      await laden();
+    } catch (e) {
+      setFehler(e instanceof ApiFehler ? e.message : "Zurücksetzen fehlgeschlagen.");
+    }
+  };
+
   const planbar = bewerbende.filter((b) => b.planbar).length;
 
   return (
     <>
       <h2>Schritt 1 – Datenimport</h2>
       {fehler && <div className="fehler">{fehler}</div>}
-      <div className="zeile">
+      <div className="zeile import-karten">
         {IMPORTE.map(({ typ, titel, hinweis }) => {
           const e = ergebnisse[typ];
           return (
@@ -80,6 +114,13 @@ export function ImportSchritt({ jahrgangId }: { jahrgangId: number }) {
                   ev.target.value = "";
                 }}
               />
+              <button
+                className="sekundaer klein import-reset"
+                onClick={() => zuruecksetzen(typ, titel)}
+                title="Alle importierten Datensätze dieser Art in diesem Jahrgang löschen"
+              >
+                Import zurücksetzen
+              </button>
               {e && (
                 <div className={e.fehler.length ? "fehler" : "erfolg"}>
                   {e.anzahl_neu} neu, {e.anzahl_aktualisiert} aktualisiert
@@ -133,7 +174,7 @@ export function ImportSchritt({ jahrgangId }: { jahrgangId: number }) {
               <thead>
                 <tr>
                   <th>ID</th><th>Name</th><th>Tag</th><th>Studiengang</th>
-                  <th>Rückmeldung</th><th>Rücksteller</th><th>Status</th>
+                  <th>Rückmeldung</th><th>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -158,7 +199,6 @@ export function ImportSchritt({ jahrgangId }: { jahrgangId: number }) {
                         ))}
                       </select>
                     </td>
-                    <td>{b.ruecksteller ? "ja" : "nein"}</td>
                     <td>
                       {b.planbar ? (
                         <span className="abzeichen gruen">wird eingeplant</span>
@@ -318,7 +358,7 @@ export function ImportSchritt({ jahrgangId }: { jahrgangId: number }) {
         {tabelle === "befangenheiten" && (
           <>
             <p className="hinweis">
-              Befangenheiten werden datensparsam ohne Grund gespeichert (H2). Auch
+              Befangenheiten werden datensparsam ohne Grund gespeichert. Auch
               nachträglich erfasste Befangenheiten werden bei der nächsten
               Neuberechnung berücksichtigt.
             </p>

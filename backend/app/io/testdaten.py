@@ -72,7 +72,7 @@ def generieren(
     raeume_klein: int = 24,
     raeume_gross: int = 10,
     zusage_quote: float = 0.50,
-    ruecksteller_quote: float = 0.115,
+    offen_quote: float = 0.115,
     befangenheit_anzahl: int = 15,
 ) -> dict[str, Path]:
     """Erzeugt die vier CSV-Dateien und gibt ihre Pfade zurück."""
@@ -86,15 +86,19 @@ def generieren(
         tag = "Fr" if i % 2 == 1 else "Sa"
         wurf = rnd.random()
         if wurf < zusage_quote:
-            status, ruecksteller = "Zusage", "nein"
-        elif wurf < zusage_quote + ruecksteller_quote:
-            status, ruecksteller = "Offen", "ja"   # Rücksteller
+            status = "Zusage"
+        elif wurf < zusage_quote + offen_quote:
+            status = "Offen"      # keine Rückmeldung — wird nicht eingeplant
         else:
-            status, ruecksteller = "Absage", "nein"
+            status = "Absage"
         studiengang = STUDIENGAENGE[0] if rnd.random() < 0.75 else STUDIENGAENGE[1]
         bewerber_zeilen.append([
             f"BW-{i:04d}", nachname, vorname, tag, geschlecht, studiengang,
-            ruecksteller, i, status, "ja",
+            # Rücksteller-Kennzeichen: Pflichtspalte des Austauschformats, wird
+            # aber von keiner Regel ausgewertet. Die Rückstellung ist ein
+            # Ergebnis des Verfahrens, kein Merkmal der Eingeladenen — die
+            # Testdaten erzeugen daher keine Rücksteller.
+            "nein", i, status, "ja",
         ])
     bewerber_pfad = ziel / "bewerbende.csv"
     _schreiben(

@@ -77,24 +77,24 @@ export function KontrolleSchritt({ jahrgangId }: { jahrgangId: number }) {
           </div>
           <div className="kennzahl">
             <b>{String(kz.w1_erfuellt ?? "–")}/{String(kz.anzahl_geplante_bewerber ?? "–")}</b>
-            <span>W1: 8 Prüfende erreicht {abweichler > 0 ? `(${abweichler} Abweichler)` : ""}</span>
+            <span>8 Prüfende erreicht {abweichler > 0 ? `(${abweichler} Abweichler)` : ""}</span>
           </div>
           <div className="kennzahl">
             <b>{String(kz.w2_durchschnitt ?? "–")}</b>
-            <span>W2: Ø Bewerbende je Prüfer:in (min {String(kz.w2_min)}, max {String(kz.w2_max)})</span>
+            <span>Ø Bewerbende je Prüfer:in (min {String(kz.w2_min)}, max {String(kz.w2_max)})</span>
           </div>
           <div className="kennzahl">
             <b>{String(kz.w5_wartezeit_max_min ?? "–")} min</b>
-            <span>W5: längste Wartezeit (Summe {String(kz.w5_wartezeit_summe_min)} min)</span>
+            <span>Längste Wartezeit (Summe {String(kz.w5_wartezeit_summe_min)} min)</span>
           </div>
           <div className="kennzahl">
             <b>{Math.round(((kz.w4_gemischte_pruefergruppen as number) ?? 0) * 100)}%</b>
-            <span>W4: gemischte Prüfergruppen</span>
+            <span>Gemischte Prüfergruppen</span>
           </div>
           {kz.w6_stabilitaet != null && (
             <div className="kennzahl">
               <b>{String((kz.w6_stabilitaet as Record<string, number>).erhalten)}</b>
-              <span>W6: Zuweisungen erhalten ({String((kz.w6_stabilitaet as Record<string, number>).neu)} neu)</span>
+              <span>Zuweisungen erhalten ({String((kz.w6_stabilitaet as Record<string, number>).neu)} neu)</span>
             </div>
           )}
         </div>

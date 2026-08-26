@@ -129,7 +129,7 @@ export function UmbuchungsDialog({
             <ul style={{ margin: "0.4rem 0", paddingLeft: "1.1rem" }}>
               {konflikte.map((k, i) => (
                 <li key={i}>
-                  <b>{k.regel}:</b> {k.meldung}
+                  <b>{k.titel}:</b> {k.meldung}
                 </li>
               ))}
             </ul>

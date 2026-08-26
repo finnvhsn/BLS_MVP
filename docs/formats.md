@@ -30,7 +30,7 @@ dokumentiert.
 | `tag` | **ja** | `Fr` / `Sa` | **Tageszuteilung aus Access (H7).** Fehlender oder ungültiger Wert ⇒ Validierungsfehler — der Tag wird niemals geraten. |
 | `geschlecht` | ja | `w` / `m` / `d` | |
 | `studiengang` | ja | Text | z. B. „Rechtswissenschaft“ |
-| `ruecksteller` | ja | `ja` / `nein` | Rücksteller-Kennzeichen |
+| `ruecksteller` | ja | `ja` / `nein` | Rücksteller-Kennzeichen. Pflichtspalte des Austauschformats, wird importiert und mitgeführt, aber von **keiner** Regel ausgewertet — die Planbarkeit hängt allein an `zugelassen`, `rueckmeldestatus` und dem Aktiv-Status. |
 | `rangfolge` | nein | Ganzzahl | Rangliste (verbleibt fachlich in Access) |
 | `rueckmeldestatus` | nein | `Zusage` / `Absage` / `Alternativtermin` / `Offen` | leer ⇒ `Offen` |
 | `zugelassen` | nein | `ja` / `nein` | leer ⇒ `ja`; muss eindeutig hervorgehen, wer zum mündlichen Verfahren zugelassen ist |
@@ -50,6 +50,11 @@ nicht abgesagt haben (aktiv).
 | `status` | ja | `Senior` / `Junior` | Senior = Vollmitglied |
 | `verfuegbar_fr` | nein | `ja` / `nein` | leer ⇒ `ja` (Prüfende stehen i. d. R. an beiden Tagen zur Verfügung) |
 | `verfuegbar_sa` | nein | `ja` / `nein` | leer ⇒ `ja` |
+
+Ein **Aktiv-Kennzeichen gibt es bewusst nicht im Importformat**: kurzfristige
+Absagen prüfender Personen werden in der Oberfläche gepflegt (Schritt 1,
+Datenbestand → Prüfende), nicht über einen erneuten Import. So bleibt der Import
+die Abbildung des Quellsystems, während tagesaktuelle Änderungen daneben stehen.
 
 ## 3. `raeume.csv` (Excel/manuell → Lösung, F_OM_003)
 

@@ -39,6 +39,31 @@ def jahrgang_laden(session: Session, jahrgang_id: int) -> Jahrgang:
     return jahrgang
 
 
+def planungsstaende_entfernen(session: Session, jahrgang_id: int) -> dict[str, int]:
+    """Löscht alle Planungsstände eines Jahrgangs samt ihrer Zuweisungen und
+    Exportläufe. Gemeinsame Grundlage für das Jahrgang-Löschen (NF_001) und das
+    Zurücksetzen einzelner Importe — ohne dieses Abräumen blieben Zuweisungen
+    mit Verweisen auf gelöschte Personen oder Räume zurück.
+
+    Committet NICHT — der Aufrufer schließt die Transaktion ab.
+    """
+    staende = session.exec(
+        select(Planungsstand.id).where(Planungsstand.jahrgang_id == jahrgang_id)
+    ).all()
+    if not staende:
+        return {"planungsstaende": 0, "zuweisungen": 0}
+    zuweisungen = session.exec(
+        select(Zuweisung.id).where(Zuweisung.planungsstand_id.in_(staende))  # type: ignore[union-attr]
+    ).all()
+    if zuweisungen:
+        session.exec(delete(ZuweisungBewerber).where(ZuweisungBewerber.zuweisung_id.in_(zuweisungen)))  # type: ignore[union-attr]
+        session.exec(delete(ZuweisungPruefer).where(ZuweisungPruefer.zuweisung_id.in_(zuweisungen)))  # type: ignore[union-attr]
+        session.exec(delete(Zuweisung).where(Zuweisung.planungsstand_id.in_(staende)))  # type: ignore[union-attr]
+    session.exec(delete(ExportLauf).where(ExportLauf.jahrgang_id == jahrgang_id))
+    session.exec(delete(Planungsstand).where(Planungsstand.jahrgang_id == jahrgang_id))
+    return {"planungsstaende": len(staende), "zuweisungen": len(zuweisungen)}
+
+
 def konfiguration_laden(session: Session, jahrgang_id: int) -> JahrgangsKonfiguration:
     zeile = session.exec(
         select(Konfiguration).where(Konfiguration.jahrgang_id == jahrgang_id)
@@ -99,21 +124,10 @@ def loeschen(
     """Löscht einen Jahrgang mit allen personenbezogenen Daten (NF_001:
     Lösch-/Aufbewahrungskonzept je Jahrgang)."""
     jahrgang = jahrgang_laden(session, jahrgang_id)
-    staende = session.exec(
-        select(Planungsstand.id).where(Planungsstand.jahrgang_id == jahrgang_id)
-    ).all()
-    zuweisungen = session.exec(
-        select(Zuweisung.id).where(Zuweisung.planungsstand_id.in_(staende))  # type: ignore[union-attr]
-    ).all() if staende else []
-    if zuweisungen:
-        session.exec(delete(ZuweisungBewerber).where(ZuweisungBewerber.zuweisung_id.in_(zuweisungen)))  # type: ignore[union-attr]
-        session.exec(delete(ZuweisungPruefer).where(ZuweisungPruefer.zuweisung_id.in_(zuweisungen)))  # type: ignore[union-attr]
-    for modell in (Zuweisung,) if staende else ():
-        session.exec(delete(modell).where(Zuweisung.planungsstand_id.in_(staende)))  # type: ignore[union-attr]
+    planungsstaende_entfernen(session, jahrgang_id)
     from ..db.models import Protokoll
 
-    for modell in (ExportLauf, Planungsstand, Befangenheit, Bewerber, Gruppe,
-                   Pruefer, Raum, Konfiguration, Protokoll):
+    for modell in (Befangenheit, Bewerber, Gruppe, Pruefer, Raum, Konfiguration, Protokoll):
         session.exec(delete(modell).where(modell.jahrgang_id == jahrgang_id))
     session.delete(jahrgang)
     session.commit()

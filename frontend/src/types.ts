@@ -85,13 +85,13 @@ export interface Konfiguration {
   zeitmodell: {
     tag_start: string;
     tag_ende: string;
-    wellen: number;
     puffer_min: number;
+    mindestpause_min: number;
   };
   formate: FormatKonfiguration[];
   gruppengroesse: number;
   gewichte: Record<string, number>;
-  solver: { timeout_sekunden: number; seed: number };
+  solver: { schritt_budget_sekunden: number; seed: number };
 }
 
 export interface Gruppe {
@@ -108,13 +108,24 @@ export interface BerechnungsStatus {
   version?: number;
   solver_status?: string;
   laufzeit_sekunden?: number;
+  /** Aktueller Optimierungsschritt, nur während "laeuft" gesetzt. */
+  schritt?: number;
+  schritte_gesamt?: number;
+  schritt_text?: string;
   konflikte?: number | Konflikt[];
   hinweise?: string[];
   meldung?: string;
 }
 
+export interface ResetUmfang {
+  typ: string;
+  posten: { bezeichnung: string; anzahl: number }[];
+  plan_verwerfen: boolean;
+}
+
 export interface Konflikt {
   regel: string;
+  titel: string;
   meldung: string;
   zuweisungen: number[];
   bewerber_ids: number[];

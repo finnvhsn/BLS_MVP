@@ -4,11 +4,12 @@ Planungsansicht (F_OM_014), Konflikte (F_OM_015), Umbuchung (F_OM_012/016)."""
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import replace
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlmodel import Session, delete, select
+from sqlmodel import Session, delete, func, select
 
 from ..core import grouping, solver
 from ..core.konfiguration import hhmm, minuten
@@ -38,6 +39,14 @@ router = APIRouter(
 # Laufende Berechnungen je Jahrgang (In-Process; ein Nutzerkreis, NF_002)
 _laeufe: dict[int, dict] = {}
 _lauf_sperre = threading.Lock()
+
+
+def berechnung_laeuft(jahrgang_id: int) -> bool:
+    """Rechnet gerade ein Solver-Lauf an diesem Jahrgang? Wer die Datenbasis
+    unter einem laufenden Lauf wegzieht, lässt ihn beim Speichern in einen
+    Fremdschlüsselfehler laufen — Aufrufer müssen das abfangen."""
+    with _lauf_sperre:
+        return _laeufe.get(jahrgang_id, {}).get("status") == "laeuft"
 
 
 # ---------------------------------------------------------------------------
@@ -151,10 +160,24 @@ class BerechnungsDaten(BaseModel):
 
 
 def _letzter_planungsstand(session: Session, jahrgang_id: int) -> Planungsstand | None:
+    # Zweitschlüssel id: bei gleicher Versionsnummer entscheidet der jüngere
+    # Datensatz, sonst wäre "der aktuelle Plan" von der Sortierlaune der
+    # Datenbank abhängig.
     return session.exec(
         select(Planungsstand).where(Planungsstand.jahrgang_id == jahrgang_id)
-        .order_by(Planungsstand.version.desc())
+        .order_by(Planungsstand.version.desc(), Planungsstand.id.desc())
     ).first()
+
+
+def _naechste_version(session: Session, jahrgang_id: int) -> int:
+    """Fortlaufend je Jahrgang — auch für Vollberechnungen, die keinen Bestand
+    erben. Andernfalls bekäme jede Vollberechnung erneut die Version 1 und der
+    Jahrgang hätte mehrere gleich nummerierte Stände."""
+    hoechste = session.exec(
+        select(func.max(Planungsstand.version))
+        .where(Planungsstand.jahrgang_id == jahrgang_id)
+    ).one()
+    return (hoechste or 0) + 1
 
 
 def _berechnung_ausfuehren(jahrgang_id: int, neuberechnung: bool, benutzername: str) -> None:
@@ -167,7 +190,19 @@ def _berechnung_ausfuehren(jahrgang_id: int, neuberechnung: bool, benutzername: 
             bestand_stand = _letzter_planungsstand(session, jahrgang_id) if neuberechnung else None
             bestand = plan_aus_db(session, bestand_stand.id) if bestand_stand else None
 
-            ergebnis = solver.berechnen(kontext, bestand=bestand)
+            def fortschritt_melden(nr: int, gesamt: int, text: str) -> None:
+                """Schreibt den aktuellen Solver-Schritt in den Laufstatus, damit
+                die Ansicht während der Minuten Wartezeit zeigt, woran gerade
+                gerechnet wird. Die Startmarke bleibt dabei erhalten."""
+                with _lauf_sperre:
+                    lauf = _laeufe.get(jahrgang_id)
+                    if lauf is not None and lauf.get("status") == "laeuft":
+                        lauf["schritt"] = nr
+                        lauf["schritte_gesamt"] = gesamt
+                        lauf["schritt_text"] = text
+
+            ergebnis = solver.berechnen(kontext, bestand=bestand,
+                                        fortschritt=fortschritt_melden)
 
             # Neue Gruppen aus gruppen_auffuellen persistieren
             for gid, ginfo in kontext.gruppen.items():
@@ -181,7 +216,7 @@ def _berechnung_ausfuehren(jahrgang_id: int, neuberechnung: bool, benutzername: 
                     session.add(zeile)
             session.flush()
 
-            version = (bestand_stand.version + 1) if bestand_stand else 1
+            version = _naechste_version(session, jahrgang_id)
             stand = Planungsstand(
                 jahrgang_id=jahrgang_id, version=version,
                 typ=PlanungsstandTyp.NEUBERECHNUNG if bestand else PlanungsstandTyp.VOLLBERECHNUNG,
@@ -231,7 +266,9 @@ def berechnen(
     with _lauf_sperre:
         if _laeufe.get(jahrgang_id, {}).get("status") == "laeuft":
             raise HTTPException(status_code=409, detail="Es läuft bereits eine Berechnung für diesen Jahrgang.")
-        _laeufe[jahrgang_id] = {"status": "laeuft"}
+        # Startzeit serverseitig festhalten: nur so zeigt die Laufzeit auch nach
+        # einem Reload oder Tabwechsel den echten Wert statt wieder bei 0 zu beginnen.
+        _laeufe[jahrgang_id] = {"status": "laeuft", "gestartet_um": time.monotonic()}
     protokollieren(session, "Berechnung gestartet", benutzer=benutzer.benutzername,
                    jahrgang_id=jahrgang_id, neuberechnung=daten.neuberechnung)
     if daten.synchron:
@@ -243,13 +280,23 @@ def berechnen(
             daemon=True,
         ).start()
     with _lauf_sperre:
-        return dict(_laeufe[jahrgang_id])
+        return _lauf_als_dict(_laeufe[jahrgang_id])
+
+
+def _lauf_als_dict(lauf: dict) -> dict:
+    """Nach außen: statt der internen Startmarke die bisherige Laufzeit.
+    Für abgeschlossene Läufe steht dort bereits die gemessene Solver-Zeit."""
+    d = dict(lauf)
+    gestartet = d.pop("gestartet_um", None)
+    if gestartet is not None:
+        d["laufzeit_sekunden"] = round(time.monotonic() - gestartet, 1)
+    return d
 
 
 @router.get("/berechnen/status")
 def berechnungs_status(jahrgang_id: int):
     with _lauf_sperre:
-        return dict(_laeufe.get(jahrgang_id, {"status": "keine"}))
+        return _lauf_als_dict(_laeufe.get(jahrgang_id, {"status": "keine"}))
 
 
 # ---------------------------------------------------------------------------

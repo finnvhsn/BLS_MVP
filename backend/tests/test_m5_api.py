@@ -55,7 +55,7 @@ def jahrgang_id(client, tmp_path_factory):
 def berechnet(client, jahrgang_id):
     # Parametrierung: kurzer Solver-Timeout für den Test (F_OM_010)
     konf = client.get(f"/api/jahrgaenge/{jahrgang_id}/konfiguration").json()
-    konf["solver"]["timeout_sekunden"] = 60
+    konf["solver"]["schritt_budget_sekunden"] = 15
     r = client.put(f"/api/jahrgaenge/{jahrgang_id}/konfiguration", json=konf)
     assert r.status_code == 200, r.text
 

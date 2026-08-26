@@ -79,6 +79,15 @@ h3 { font-size: 1rem; margin: 1rem 0 0.5rem; }
 .zeile { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
 .zeile > .karte { flex: 1; min-width: 320px; }
 
+/* Import-Karten: gleiche Höhe unabhängig von der Länge des Hinweistextes,
+   Datei-Auswahl dadurch auf gemeinsamer Grundlinie. */
+.zeile.import-karten { align-items: stretch; }
+.zeile.import-karten > .karte { display: flex; flex-direction: column; }
+.zeile.import-karten > .karte > .hinweis { flex: 1; }
+/* Nicht dehnen (die Karte ist eine Flex-Spalte) und optisch zurücknehmen —
+   Zurücksetzen ist der Ausnahmefall, nicht der Regelweg. */
+.import-reset { align-self: flex-start; margin-top: 0.5rem; }
+
 button {
   background: var(--blau);
   color: #fff;
@@ -105,6 +114,9 @@ input, select {
   font-size: 0.9rem;
 }
 input[type="number"] { width: 5.5rem; }
+/* Datei-Auswahl hat eine feste intrinsische Breite und würde sonst über den
+   Kartenrand hinauslaufen. */
+input[type="file"] { width: 100%; max-width: 100%; }
 label { display: inline-flex; align-items: center; gap: 0.4rem; }
 .feld { display: flex; flex-direction: column; gap: 0.25rem; }
 .feld span { font-size: 0.8rem; color: var(--text-schwach); }

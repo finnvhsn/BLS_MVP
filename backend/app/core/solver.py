@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from ortools.sat.python import cp_model
@@ -91,11 +92,9 @@ def _ereignisse_bauen(kontext: PlanKontext, tag: Tag) -> list[_Ereignis]:
     zm = konf.zeitmodell
     ereignisse: list[_Ereignis] = []
 
-    def starts_fuer(dauer: int, welle: int = 0) -> list[int]:
-        # H8: Slots vollständig im Tagesfenster; Wellen versetzen den frühesten
-        # Start der Gruppenformate je Kohorte (F_OM_005: Etappen/Wellen)
-        fruehester = zm.start_min + welle * ((zm.ende_min - zm.start_min) // max(zm.wellen, 1)) // 2
-        return list(range(fruehester, zm.ende_min - dauer + 1, RASTER_MIN))
+    def starts_fuer(dauer: int) -> list[int]:
+        # H8: Slots liegen vollständig im Tagesfenster.
+        return list(range(zm.start_min, zm.ende_min - dauer + 1, RASTER_MIN))
 
     gruppen_des_tages = sorted(
         (g for g in kontext.gruppen.values() if g.tag == tag), key=lambda g: g.nummer
@@ -106,7 +105,6 @@ def _ereignisse_bauen(kontext: PlanKontext, tag: Tag) -> list[_Ereignis]:
         )
         if not mitglieder:
             continue
-        welle = (gruppe.nummer - 1) % max(zm.wellen, 1)
         for fmt in konf.formate:
             if fmt.typ == "einzel":
                 continue
@@ -114,7 +112,7 @@ def _ereignisse_bauen(kontext: PlanKontext, tag: Tag) -> list[_Ereignis]:
                 key=("gruppe", gruppe.id, fmt.key), format_key=fmt.key, typ=fmt.typ,
                 dauer=fmt.dauer_min, anzahl_pruefer=fmt.anzahl_pruefer,
                 bewerber_ids=mitglieder, gruppe_id=gruppe.id,
-                starts=starts_fuer(fmt.dauer_min, welle),
+                starts=starts_fuer(fmt.dauer_min),
             ))
     for info in sorted(kontext.planbare_bewerber(tag), key=lambda b: b.id):
         for fmt in konf.formate:
@@ -231,8 +229,14 @@ def _phase_a(
             v for t, v in x[i].items() if t - vorlauf <= tick < t + e.dauer
         )
 
-    # H5: keine Doppelbelegung je Bewerber:in — Gruppenarbeit belegt für ihre
-    # Mitglieder zusätzlich den Puffer davor (Kaffeepause als Vorbereitung)
+    # H5: keine Doppelbelegung je Bewerber:in. Jedes Ereignis belegt zusätzlich
+    # die Mindestpause davor (Wegzeit für den Raumwechsel); Gruppenformate
+    # mindestens ihren Vorbereitungspuffer (Kaffeepause). Über den Vorlauf
+    # erzwingt dieselbe Bedingung damit auch den Abstand zum Vortermin.
+    def vorlauf_fuer(i: int) -> int:
+        gruppen_puffer = zm.puffer_min if ereignisse[i].typ == "gruppe" else 0
+        return max(zm.mindestpause_min, gruppen_puffer)
+
     nach_bewerber: dict[int, list[int]] = defaultdict(list)
     for i, e in enumerate(ereignisse):
         for bid in e.bewerber_ids:
@@ -240,8 +244,7 @@ def _phase_a(
     for bid, indizes in nach_bewerber.items():
         for tick in ticks:
             model.Add(sum(
-                occ(i, tick, vorlauf=(zm.puffer_min if ereignisse[i].typ == "gruppe" else 0))
-                for i in indizes
+                occ(i, tick, vorlauf=vorlauf_fuer(i)) for i in indizes
             ) <= 1)
 
     # H6 (Kapazität): je Zeitpunkt höchstens so viele Ereignisse je Raumgröße,
@@ -310,7 +313,7 @@ def _phase_a(
 
 def _raeume_zuweisen(
     kontext: PlanKontext, tag: Tag, ereignisse: list[_Ereignis],
-    bestand: dict[tuple, PlanZuweisung], seed: int,
+    bestand: dict[tuple, PlanZuweisung], seed: int, budget: float = 30.0,
 ) -> None:
     """Konkrete Raumvergabe auf die fixierten Zeiten als kleines CP-SAT-Matching.
 
@@ -354,7 +357,9 @@ def _raeume_zuweisen(
                 treffer.append(y[i][alt.raum_id])
                 model.AddHint(y[i][alt.raum_id], 1)
         model.Maximize(sum(treffer))
-        solver = _solver_konfigurieren(seed, timeout_s=30.0)
+        # Reines Matching auf fixierte Zeiten — deutlich einfacher als die
+        # Phasen A/B, daher höchstens 30 s, bei kleinerem Budget entsprechend weniger.
+        solver = _solver_konfigurieren(seed, timeout_s=min(budget, 30.0))
         solver.parameters.relative_gap_limit = 0.0
         if solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             for i, e in enumerate(ereignisse):
@@ -528,6 +533,7 @@ def _phase_b(
 def berechnen(
     kontext: PlanKontext,
     bestand: Plan | None = None,
+    fortschritt: Callable[[int, int, str], None] | None = None,
 ) -> SolverErgebnis:
     """Berechnet den Gesamtplan für beide Prüfungstage.
 
@@ -536,7 +542,6 @@ def berechnen(
     """
     konf: JahrgangsKonfiguration = kontext.konfiguration
     seed = konf.solver.seed
-    timeout = konf.solver.timeout_sekunden
     beginn = time.monotonic()
     hinweise: list[str] = []
     relaxiert = False
@@ -562,15 +567,22 @@ def berechnen(
 
     zuweisungen: list[PlanZuweisung] = []
     kontakte: dict[int, int] = defaultdict(int)
-    # Budget je Phase (2 Tage × 2 Phasen). Die Lösungsqualität erreicht ihr
-    # Plateau nach wenigen Sekunden; 60 s je Phase sind großzügig und halten
-    # die Vollberechnung weit unter dem NF_003-Limit von 15 min.
-    phasen_timeout = max(5.0, min(60.0, timeout / 4))
+    schritt_budget = float(konf.solver.schritt_budget_sekunden)
 
-    for tag in (Tag.FR, Tag.SA):
+    # Fortschritt: drei Schritte je Tag, der die Anzeige speist.
+    TAGESNAME = {Tag.FR: "Freitag", Tag.SA: "Samstag"}
+    zu_planen = [t for t in (Tag.FR, Tag.SA) if alle_ereignisse[t]]
+    schritte_gesamt = len(zu_planen) * 3
+    schritt_nr = 0
+
+    def melden(tag: Tag, was: str) -> None:
+        nonlocal schritt_nr
+        schritt_nr += 1
+        if fortschritt is not None:
+            fortschritt(schritt_nr, schritte_gesamt, f"{TAGESNAME[tag]} · {was}")
+
+    for tag in zu_planen:
         ereignisse = alle_ereignisse[tag]
-        if not ereignisse:
-            continue
 
         vorab = _diagnose(kontext, tag, ereignisse)
         if vorab:
@@ -587,8 +599,9 @@ def berechnen(
             offset = dict(kontakte)
 
         # Phase A — mit Relaxierungs-Stufe (ohne Prüfer-Kapazitätsschranken)
-        if not _phase_a(kontext, tag, ereignisse, seed, phasen_timeout, bestand_map):
-            if not _phase_a(kontext, tag, ereignisse, seed, phasen_timeout,
+        melden(tag, "Zeitplanung")
+        if not _phase_a(kontext, tag, ereignisse, seed, schritt_budget, bestand_map):
+            if not _phase_a(kontext, tag, ereignisse, seed, schritt_budget,
                             bestand_map, mit_pruefer_kapazitaet=False):
                 raise KeinPlanMoeglich([Konflikt(
                     regel="H8",
@@ -604,12 +617,14 @@ def berechnen(
                 "die Prüfendenzuordnung kann weiche Regelverletzungen enthalten."
             )
 
-        _raeume_zuweisen(kontext, tag, ereignisse, bestand_map, seed)
+        melden(tag, "Raumvergabe")
+        _raeume_zuweisen(kontext, tag, ereignisse, bestand_map, seed, schritt_budget)
 
         # Phase B — Relaxierungs-Stufe: H1/H3 weich mit hoher Strafe
-        if not _phase_b(kontext, tag, ereignisse, seed, phasen_timeout,
+        melden(tag, "Prüfendenzuordnung")
+        if not _phase_b(kontext, tag, ereignisse, seed, schritt_budget,
                         bestand_map, offset, ziel):
-            if not _phase_b(kontext, tag, ereignisse, seed, phasen_timeout,
+            if not _phase_b(kontext, tag, ereignisse, seed, schritt_budget,
                             bestand_map, offset, ziel, weich=True):
                 raise KeinPlanMoeglich([Konflikt(
                     regel="H1",

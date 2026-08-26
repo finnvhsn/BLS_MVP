@@ -63,32 +63,39 @@ export function ParameterSchritt({ jahrgangId }: { jahrgangId: number }) {
               />
             </label>
             <label className="feld">
-              <span>Wellen je Tag</span>
-              <input
-                type="number"
-                min={1}
-                max={4}
-                value={zm.wellen}
-                onChange={(e) =>
-                  setKonf({ ...konf, zeitmodell: { ...zm, wellen: Number(e.target.value) } })
-                }
-              />
-            </label>
-            <label className="feld">
-              <span>Pausenpuffer (min)</span>
+              <span>Vorbereitungspuffer Gruppe (Min.)</span>
               <input
                 type="number"
                 min={0}
+                step={15}
                 value={zm.puffer_min}
                 onChange={(e) =>
                   setKonf({ ...konf, zeitmodell: { ...zm, puffer_min: Number(e.target.value) } })
                 }
               />
             </label>
+            <label className="feld">
+              <span>Mindestpause zwischen Terminen (Min.)</span>
+              <input
+                type="number"
+                min={0}
+                step={15}
+                value={zm.mindestpause_min}
+                onChange={(e) =>
+                  setKonf({
+                    ...konf,
+                    zeitmodell: { ...zm, mindestpause_min: Number(e.target.value) },
+                  })
+                }
+              />
+            </label>
           </div>
           <p className="hinweis">
-            Alle Zuweisungen liegen vollständig innerhalb dieses Fensters (Regel H8).
-            Der Puffer wirkt als Kaffeepause/Vorbereitungszeit vor dem Gruppenvortrag.
+            Alle Zuweisungen liegen vollständig innerhalb dieses Fensters. Die
+            <b> Mindestpause</b> ist die Wegzeit für den Raumwechsel und gilt zwischen
+            allen Terminen einer Person; der <b>Vorbereitungspuffer</b> gilt zusätzlich
+            nur vor dem Gruppenvortrag (Kaffeepause). Beide Werte wirken nur in
+            Schritten von 15&nbsp;Minuten — das ist das Zeitraster der Planung.
           </p>
         </div>
 
@@ -106,15 +113,19 @@ export function ParameterSchritt({ jahrgangId }: { jahrgangId: number }) {
               />
             </label>
             <label className="feld">
-              <span>Solver-Zeitlimit (Sekunden)</span>
+              <span>Zeitbudget je Optimierungsschritt (Sek.)</span>
               <input
                 type="number"
-                min={10}
-                value={konf.solver.timeout_sekunden}
+                min={5}
+                max={60}
+                value={konf.solver.schritt_budget_sekunden}
                 onChange={(e) =>
                   setKonf({
                     ...konf,
-                    solver: { ...konf.solver, timeout_sekunden: Number(e.target.value) },
+                    solver: {
+                      ...konf.solver,
+                      schritt_budget_sekunden: Number(e.target.value),
+                    },
                   })
                 }
               />
@@ -130,6 +141,13 @@ export function ParameterSchritt({ jahrgangId }: { jahrgangId: number }) {
               />
             </label>
           </div>
+          <p className="hinweis">
+            Das Budget gilt je Optimierungsschritt, nicht für den Gesamtlauf: eine
+            Berechnung besteht aus drei Schritten je Prüfungstag (Zeitplanung,
+            Raumvergabe, Prüfendenzuordnung). Mehr als 60&nbsp;Sekunden bringt kein
+            besseres Ergebnis — die Lösungsqualität erreicht ihr Plateau nach
+            wenigen Sekunden; ein kleinerer Wert verkürzt die Wartezeit.
+          </p>
         </div>
       </div>
 
@@ -214,7 +232,7 @@ export function ParameterSchritt({ jahrgangId }: { jahrgangId: number }) {
                   />
                 </td>
                 <td>{f.raumgroesse}</td>
-                <td>{f.nur_senior ? "ja (H4)" : "nein"}</td>
+                <td>{f.nur_senior ? "ja" : "nein"}</td>
               </tr>
             ))}
           </tbody>
@@ -222,42 +240,11 @@ export function ParameterSchritt({ jahrgangId }: { jahrgangId: number }) {
         <p className="hinweis">
           Summe der Prüfergruppengrößen ={" "}
           <b>{konf.formate.reduce((s, f) => s + f.anzahl_pruefer, 0)} Kontakte</b> je
-          Bewerber:in (Ziel W1: 8 unterschiedliche Prüfende).
+          Bewerber:in (Ziel: 8 unterschiedliche Prüfende).
         </p>
-      </div>
-
-      <div className="karte">
-        <h3 style={{ marginTop: 0 }}>Gewichtung der weichen Ziele (W1–W6)</h3>
-        <div className="zeile">
-          {Object.entries(konf.gewichte).map(([schluessel, wert]) => (
-            <label className="feld" key={schluessel}>
-              <span>{GEWICHT_NAMEN[schluessel] ?? schluessel}</span>
-              <input
-                type="number"
-                min={0}
-                value={wert}
-                onChange={(e) =>
-                  setKonf({
-                    ...konf,
-                    gewichte: { ...konf.gewichte, [schluessel]: Number(e.target.value) },
-                  })
-                }
-              />
-            </label>
-          ))}
-        </div>
       </div>
 
       <button onClick={speichern}>Konfiguration speichern</button>
     </>
   );
 }
-
-const GEWICHT_NAMEN: Record<string, string> = {
-  w1_acht_kontakte: "W1 – 8 unterschiedliche Prüfende",
-  w2_gleichverteilung: "W2 – gleichmäßige Auslastung",
-  w3_diversitaet_gruppen: "W3 – Diversität Bewerbendengruppen",
-  w4_diversitaet_pruefer: "W4 – gemischte Prüfergruppen",
-  w5_wartezeit: "W5 – Wartezeiten minimieren",
-  w6_bestandserhalt: "W6 – Bestandserhalt bei Neuberechnung",
-};

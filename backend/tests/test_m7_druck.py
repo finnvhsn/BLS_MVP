@@ -18,7 +18,7 @@ KLEIN = dict(
 @pytest.fixture(scope="module")
 def geloest(tmp_path_factory):
     konf = standard_konfiguration()
-    konf.solver.timeout_sekunden = 40
+    konf.solver.schritt_budget_sekunden = 10
     verfahren = verfahren_erzeugen(tmp_path_factory.mktemp("m7"), konf, **KLEIN)
     einteilung = grouping.gruppen_einteilen(verfahren.kontext, seed=5)
     kontext = grouping.kontext_mit_gruppen(verfahren.kontext, einteilung)

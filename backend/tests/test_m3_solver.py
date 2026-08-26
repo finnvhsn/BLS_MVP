@@ -27,7 +27,7 @@ KOMPAKT = dict(  # kompakte, aber strukturgleiche Instanz
 
 def _kompakte_konfiguration():
     konf = standard_konfiguration()
-    konf.solver.timeout_sekunden = 80  # 20 s je Phase genügen der kleinen Instanz
+    konf.solver.schritt_budget_sekunden = 20  # genügt der kleinen Instanz
     return konf
 
 

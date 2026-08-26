@@ -25,7 +25,7 @@ KOMPAKT = dict(
 
 def _konfiguration():
     konf = standard_konfiguration()
-    konf.solver.timeout_sekunden = 80
+    konf.solver.schritt_budget_sekunden = 20
     return konf
 
 

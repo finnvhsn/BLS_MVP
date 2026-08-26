@@ -39,9 +39,16 @@ class Konflikt:
     pruefer_ids: list = field(default_factory=list)
     raum_id: int | None = None
 
+    @property
+    def titel(self) -> str:
+        """Klartext-Titel der verletzten Regel — die UI zeigt ihn statt der ID."""
+        regel = HARTE_REGELN.get(self.regel)
+        return regel.titel if regel else self.regel
+
     def als_dict(self) -> dict:
         return {
             "regel": self.regel,
+            "titel": self.titel,
             "meldung": self.meldung,
             "zuweisungen": self.zuweisungen,
             "bewerber_ids": self.bewerber_ids,

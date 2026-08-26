@@ -20,7 +20,7 @@ export function Konfliktliste({
       <ul className="konfliktliste">
         {konflikte.map((k, i) => (
           <li key={i} onClick={() => onSpringen(k)} title="Zur Stelle springen">
-            <span className="regel">{k.regel}</span>
+            <span className="regel">{k.titel}</span>
             {k.meldung}
           </li>
         ))}

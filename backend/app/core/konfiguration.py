@@ -58,12 +58,30 @@ class Zeitmodell(BaseModel):
 
     tag_start: str = "10:00"
     tag_ende: str = "17:15"
-    # Etappen/Wellen (F_OM_005): Anzahl der Kohorten-Wellen je Tag.
-    # 1 = ganzer Tag ein Fenster; N teilt die Gruppen in N zeitversetzte Kohorten.
-    wellen: int = Field(default=1, ge=1, le=4)
-    # Pufferzeit zwischen zwei Prüfungen derselben Person (Kaffeepause vor dem
-    # Gruppenvortrag dient als informelle Vorbereitung — Default 15 min Puffer).
+    # Vorbereitungspuffer vor dem Gruppenvortrag (Kaffeepause als informelle
+    # Vorbereitungszeit) — wirkt nur vor Gruppenformaten.
     puffer_min: int = Field(default=15, ge=0)
+    # Mindestpause zwischen zwei Terminen derselben Person: Wegzeit für den
+    # Raumwechsel. Gilt für ALLE Formate, auch für Einzelgespräche.
+    mindestpause_min: int = Field(default=15, ge=0)
+
+    @field_validator("mindestpause_min")
+    @classmethod
+    def _auf_raster(cls, v: int) -> int:
+        """Belegungen werden auf dem RASTER_MIN-Raster geprüft; ein Wert
+        dazwischen fiele zwischen zwei Rasterpunkte und bliebe wirkungslos,
+        ohne dass es auffiele. Lieber hier ablehnen als still nichts tun.
+
+        Bewusst NICHT auf ``puffer_min`` angewandt: dort existieren gespeicherte
+        Konfigurationen mit rasterfremden Werten (z. B. 10), die sonst beim Laden
+        scheitern würden. Solche Werte bleiben wirkungslos — siehe docs/regeln.md.
+        """
+        if v % RASTER_MIN:
+            raise ValueError(
+                f"Mindestpause muss ein Vielfaches von {RASTER_MIN} Minuten sein "
+                f"(erhalten: {v}). Kleinere Abstände kann das Zeitraster nicht abbilden."
+            )
+        return v
 
     @property
     def start_min(self) -> int:
@@ -81,20 +99,64 @@ class Zeitmodell(BaseModel):
 
 
 class Gewichte(BaseModel):
-    """Gewichte der weichen Regeln W1–W6 (benannte Konstanten, konfigurierbar)."""
+    """Gewichte der weichen Ziele W2, W4, W5, W6 in der Zielfunktion des Solvers.
 
-    w1_acht_kontakte: int = 100        # Abweichung von 8 unterschiedlichen Prüfenden
+    Solver-Tuning, kein Verfahrensparameter — daher bewusst NICHT in der UI
+    parametrierbar (ein Fehleintrag erzeugt keinen Fehler, sondern still einen
+    schlechteren Plan). Über die Konfigurations-API bleiben sie überschreibbar.
+
+    Die Staffelung ist notwendig, weil die vier Terme verschiedene Einheiten
+    messen und ihre Rohwerte um Größenordnungen auseinanderliegen:
+      - W5: Minuten je Bewerber:in, aufsummiert  → ~10.000–25.000
+      - W6: Anzahl erhaltener Zuweisungen        → einige hundert
+      - W2: Auslastungsabweichung je Prüfer:in   → kleine Ganzzahlen
+      - W4: gemischte Prüfergruppe (0/1)         → 0/1 je Ereignis
+    Bei gleicher Gewichtung würde W5 alles andere überstimmen. w6 = 1000 liegt
+    bewusst unter STRAFE = 1_000_000 (solver.py): erst dadurch ist eine
+    Neuberechnung minimalinvasiv, ohne die Relaxierung auszuhebeln.
+
+    W1 (8 unterschiedliche Prüfende) ist strukturell durch H1 + volle Panels
+    impliziert und braucht keinen Term; W3 (Diversität der Bewerbendengruppen)
+    wirkt in Stufe 1 über grouping.py.
+    """
+
     w2_gleichverteilung: int = 30      # Abweichung von gleichmäßiger Prüfer-Auslastung
     w4_diversitaet_pruefer: int = 10   # gemischte Prüfergruppen (Geschlecht)
     w5_wartezeit: int = 5              # Wartezeit-Minuten der Bewerbenden
     w6_bestandserhalt: int = 1000      # Abweichung vom bestehenden Plan (Neuberechnung)
-    # W3 (Diversität Bewerbendengruppen) wirkt in Stufe 1 (grouping.py):
-    w3_diversitaet_gruppen: int = 10
 
 
 class SolverParameter(BaseModel):
-    timeout_sekunden: int = Field(default=600, ge=10)  # NF_003: Ziel ≤ 15 min
+    """Steuerung des Solvers.
+
+    ``schritt_budget_sekunden`` ist das Zeitbudget **je Optimierungsschritt**,
+    nicht für den Gesamtlauf. Ein Lauf besteht aus drei Schritten je Prüfungstag
+    (Zeitplanung, Raumvergabe, Prüfendenzuordnung); die Gesamtdauer folgt daraus
+    und liegt damit auch im schlechtesten Fall unter dem NF_003-Ziel von 15 min.
+    Mehr als 60 s bringt kein besseres Ergebnis — die Lösungsqualität erreicht
+    ihr Plateau nach wenigen Sekunden.
+    """
+
+    schritt_budget_sekunden: int = Field(default=60, ge=5, le=60)
     seed: int = 42                                      # Determinismus (NF_010)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _altes_feld_umrechnen(cls, daten):
+        """Bis Formatversion 1.0 hieß das Feld ``timeout_sekunden`` und las sich
+        wie ein Gesamtlimit. Tatsächlich wurde daraus ``max(5, min(60, wert/4))``
+        je Schritt — der alte Default 600 entsprach also exakt 60 s je Schritt.
+        Gespeicherte Konfigurationen werden hier auf den neuen Namen umgerechnet,
+        damit sie unverändert weiterrechnen statt an der Validierung zu scheitern.
+        """
+        if (isinstance(daten, dict)
+                and "schritt_budget_sekunden" not in daten
+                and daten.get("timeout_sekunden") is not None):
+            umgerechnet = dict(daten)
+            alt = int(umgerechnet.pop("timeout_sekunden"))
+            umgerechnet["schritt_budget_sekunden"] = max(5, min(60, alt // 4))
+            return umgerechnet
+        return daten
 
 
 class JahrgangsKonfiguration(BaseModel):

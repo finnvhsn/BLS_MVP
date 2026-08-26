@@ -39,7 +39,7 @@ def jahrgang_id(client, tmp_path_factory):
                         files={"datei": (f"{typ}.csv", pfade[typ].read_bytes(), "text/csv")})
         assert r.json()["fehler"] == []
     konf = client.get(f"/api/jahrgaenge/{jid}/konfiguration").json()
-    konf["solver"]["timeout_sekunden"] = 40
+    konf["solver"]["schritt_budget_sekunden"] = 10
     client.put(f"/api/jahrgaenge/{jid}/konfiguration", json=konf)
     client.post(f"/api/jahrgaenge/{jid}/gruppen/einteilen", json={})
     r = client.post(f"/api/jahrgaenge/{jid}/berechnen",

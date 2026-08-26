@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydantic import BaseModel
-from sqlmodel import Session, select
+from sqlmodel import Session, delete, func, select
 
 from ..core.protokoll import protokollieren
 from ..core.security import aktueller_benutzer
@@ -15,12 +15,14 @@ from ..db.models import (
     Benutzer,
     Bewerber,
     Geschlecht,
+    Gruppe,
+    Planungsstand,
     Pruefer,
     Raum,
     Raumgroesse,
 )
 from ..io import importer
-from .jahrgaenge import jahrgang_laden
+from .jahrgaenge import jahrgang_laden, planungsstaende_entfernen
 
 router = APIRouter(
     prefix="/api/jahrgaenge/{jahrgang_id}", tags=["Stammdaten"],
@@ -57,6 +59,99 @@ async def csv_import(
         fehler=len(ergebnis.fehler),
     )
     return ergebnis.als_dict()
+
+
+# ---------------------------------------------------------------------------
+# Import zurücksetzen
+# ---------------------------------------------------------------------------
+
+# Was ein Zurücksetzen je Datenart mitreißt. Befangenheiten hängen an Bewerbenden
+# UND Prüfenden, entfallen also mit beiden. Ein Wegfall von Befangenheiten allein
+# kann keinen bestehenden Plan ungültig machen (er lockert nur H2) — deshalb ist
+# das die einzige Art, die die Planungsstände stehen lässt.
+# Reihenfolge je Eintrag ist Löschreihenfolge: Verweisende zuerst (Befangenheit →
+# Bewerber, Bewerber → Gruppe), damit auch bei aktivierter FK-Prüfung nichts hängt.
+RESET_UMFANG: dict[str, dict] = {
+    "bewerbende": {"modelle": (Befangenheit, Bewerber, Gruppe), "plan_verwerfen": True},
+    "pruefende": {"modelle": (Befangenheit, Pruefer), "plan_verwerfen": True},
+    "raeume": {"modelle": (Raum,), "plan_verwerfen": True},
+    "befangenheiten": {"modelle": (Befangenheit,), "plan_verwerfen": False},
+}
+
+
+# Anzeigenamen für die Rückfrage in der UI — die Meldung soll die Fachsprache
+# sprechen, nicht die Klassennamen des Datenmodells.
+RESET_BEZEICHNUNGEN = {
+    "Bewerber": "Bewerbende", "Pruefer": "Prüfende", "Raum": "Räume",
+    "Befangenheit": "Befangenheiten", "Gruppe": "Gruppen",
+}
+
+
+def _reset_typ_pruefen(typ: str) -> dict:
+    if typ not in RESET_UMFANG:
+        raise HTTPException(status_code=404, detail=f"Unbekannter Import-Typ {typ!r}.")
+    return RESET_UMFANG[typ]
+
+
+def _anzahl(session: Session, modell, jahrgang_id: int) -> int:
+    return session.exec(
+        select(func.count()).select_from(modell)
+        .where(modell.jahrgang_id == jahrgang_id)
+    ).one()
+
+
+@router.get("/import/{typ}/umfang")
+def reset_umfang(jahrgang_id: int, typ: str, session: Session = Depends(get_session)):
+    """Was ein Zurücksetzen löschen würde — Grundlage für die Rückfrage in der UI.
+    Verändert nichts."""
+    umfang = _reset_typ_pruefen(typ)
+    jahrgang_laden(session, jahrgang_id)
+    posten = [
+        {"bezeichnung": RESET_BEZEICHNUNGEN[m.__name__],
+         "anzahl": _anzahl(session, m, jahrgang_id)}
+        for m in umfang["modelle"]
+    ]
+    if umfang["plan_verwerfen"]:
+        posten.append({"bezeichnung": "Planungsstände",
+                       "anzahl": _anzahl(session, Planungsstand, jahrgang_id)})
+    return {"typ": typ, "posten": posten, "plan_verwerfen": umfang["plan_verwerfen"]}
+
+
+@router.delete("/import/{typ}")
+def reset(
+    jahrgang_id: int, typ: str,
+    session: Session = Depends(get_session),
+    benutzer: Benutzer = Depends(aktueller_benutzer),
+):
+    """Setzt einen Import zurück: löscht alle Datensätze dieser Art im Jahrgang.
+
+    Gegenstück zum Re-Import (F_OM_001 AK3): der Import ist ein Upsert, entfernt
+    also keine Zeilen, die in einer korrigierten CSV fehlen. Für den Fehlerfall
+    „falsche Datei hochgeladen“ braucht es dieses ausdrückliche Zurücksetzen.
+    """
+    umfang = _reset_typ_pruefen(typ)
+    jahrgang_laden(session, jahrgang_id)
+    # Sonst schreibt der laufende Solver seine Zuweisungen gegen bereits
+    # gelöschte Räume/Gruppen und bricht mit einem Fremdschlüsselfehler ab.
+    from .planung import berechnung_laeuft
+
+    if berechnung_laeuft(jahrgang_id):
+        raise HTTPException(
+            status_code=409,
+            detail="Es läuft gerade eine Berechnung für diesen Jahrgang. "
+                   "Bitte erst deren Ende abwarten.",
+        )
+
+    geloescht: dict[str, int] = {}
+    if umfang["plan_verwerfen"]:
+        geloescht |= planungsstaende_entfernen(session, jahrgang_id)
+    for modell in umfang["modelle"]:
+        geloescht[RESET_BEZEICHNUNGEN[modell.__name__]] = _anzahl(session, modell, jahrgang_id)
+        session.exec(delete(modell).where(modell.jahrgang_id == jahrgang_id))
+    session.commit()
+    protokollieren(session, f"Import zurückgesetzt: {typ}",
+                   benutzer=benutzer.benutzername, jahrgang_id=jahrgang_id, **geloescht)
+    return {"typ": typ, "geloescht": geloescht}
 
 
 # ---------------------------------------------------------------------------

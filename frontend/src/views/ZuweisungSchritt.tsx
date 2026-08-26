@@ -1,6 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ApiFehler, get, post } from "../api";
 import type { BerechnungsStatus, Gruppe, Konflikt } from "../types";
+
+/** Laufzeit als „42 s“ bzw. „3:07 min“ — der Solver läuft bis zu 15 Minuten. */
+function dauer(sekunden: number): string {
+  const s = Math.max(0, Math.floor(sekunden));
+  if (s < 60) return `${s} s`;
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} min`;
+}
 
 /** Schritt 3 – Gruppeneinteilung (F_OM_006) und Zuweisung (F_OM_007/011). */
 export function ZuweisungSchritt({
@@ -14,7 +21,10 @@ export function ZuweisungSchritt({
   const [seed, setSeed] = useState<string>("");
   const [status, setStatus] = useState<BerechnungsStatus>({ status: "keine" });
   const [fehler, setFehler] = useState<string | null>(null);
-  const abfrage = useRef<number | null>(null);
+  /** Laufzeit des aktuellen Laufs in Sekunden. Der Server liefert den echten
+   *  Wert (übersteht Reload/Tabwechsel), dazwischen zählen wir lokal weiter,
+   *  damit die Anzeige nicht im 2-Sekunden-Takt springt. */
+  const [laufzeit, setLaufzeit] = useState(0);
 
   const gruppenLaden = useCallback(
     () => get<Gruppe[]>(`/api/jahrgaenge/${jahrgangId}/gruppen`).then(setGruppen),
@@ -24,16 +34,27 @@ export function ZuweisungSchritt({
   const statusLaden = useCallback(async () => {
     const s = await get<BerechnungsStatus>(`/api/jahrgaenge/${jahrgangId}/berechnen/status`);
     setStatus(s);
+    if (s.status === "laeuft") setLaufzeit(s.laufzeit_sekunden ?? 0);
     return s;
   }, [jahrgangId]);
 
   useEffect(() => {
     gruppenLaden().catch(() => undefined);
     statusLaden().catch(() => undefined);
-    return () => {
-      if (abfrage.current) window.clearInterval(abfrage.current);
-    };
   }, [gruppenLaden, statusLaden]);
+
+  // Solange gerechnet wird: Status nachfragen und die Sekunden mitzählen. Als
+  // Effekt am Status (nicht im Klick-Handler), damit auch ein Reload oder ein
+  // Schrittwechsel einen bereits laufenden Lauf weiterverfolgt.
+  useEffect(() => {
+    if (status.status !== "laeuft") return;
+    const sekunde = window.setInterval(() => setLaufzeit((s) => s + 1), 1000);
+    const abfrage = window.setInterval(() => { statusLaden().catch(() => undefined); }, 2000);
+    return () => {
+      window.clearInterval(sekunde);
+      window.clearInterval(abfrage);
+    };
+  }, [status.status, statusLaden]);
 
   const einteilen = async () => {
     setFehler(null);
@@ -50,14 +71,8 @@ export function ZuweisungSchritt({
     setFehler(null);
     try {
       await post(`/api/jahrgaenge/${jahrgangId}/berechnen`, { neuberechnung });
-      setStatus({ status: "laeuft" });
-      abfrage.current = window.setInterval(async () => {
-        const s = await statusLaden();
-        if (s.status !== "laeuft" && abfrage.current) {
-          window.clearInterval(abfrage.current);
-          abfrage.current = null;
-        }
-      }, 2000);
+      setLaufzeit(0);
+      setStatus({ status: "laeuft" });   // Abfrage-Takt startet der Effekt oben
     } catch (e) {
       setFehler(e instanceof ApiFehler ? e.message : "Berechnung konnte nicht gestartet werden.");
     }
@@ -87,7 +102,7 @@ export function ZuweisungSchritt({
       <div className="karte">
         <h3 style={{ marginTop: 0 }}>Stufe 1: Gruppeneinteilung</h3>
         <p className="hinweis">
-          Zufallsbasiert und möglichst gemischt nach Geschlecht und Studiengang (W3).
+          Zufallsbasiert und möglichst gemischt nach Geschlecht und Studiengang.
           Neue Einteilung verwirft die bisherige; einzelne Personen können unten
           manuell verschoben werden.
         </p>
@@ -159,7 +174,7 @@ export function ZuweisungSchritt({
             className="sekundaer"
             onClick={() => berechnen(true)}
             disabled={status.status === "laeuft" || gruppen.length === 0}
-            title="Bestehende Zuweisungen möglichst beibehalten (minimalinvasiv, W6)"
+            title="Bestehende Zuweisungen möglichst beibehalten (minimalinvasiv)"
           >
             Neuberechnung (Bestand erhalten)
           </button>
@@ -170,8 +185,18 @@ export function ZuweisungSchritt({
 
         {status.status === "laeuft" && (
           <div className="erfolg" style={{ background: "var(--gelb-hell)", borderColor: "#c9a200", color: "#8a6d00" }}>
-            Berechnung läuft … (Regeln H1–H9 als Constraints, Ziele W1–W6 in der
-            Optimierung; Zeitlimit gemäß Konfiguration)
+            <b>Berechnung läuft … {dauer(laufzeit)}</b>
+            {status.schritt_text && (
+              <div>
+                {status.schritt_text} (Schritt {status.schritt} von{" "}
+                {status.schritte_gesamt})
+              </div>
+            )}
+            <div className="hinweis" style={{ color: "inherit" }}>
+              Alle harten Regeln als Constraints, weiche Ziele in der Optimierung;
+              Zeitlimit gemäß Konfiguration. Das Fenster kann geschlossen werden —
+              die Berechnung läuft auf dem Server weiter.
+            </div>
           </div>
         )}
 
@@ -197,7 +222,7 @@ export function ZuweisungSchritt({
             <ul style={{ margin: "0.4rem 0 0", paddingLeft: "1.1rem" }}>
               {(status.konflikte as Konflikt[] | undefined)?.map((k, i) => (
                 <li key={i}>
-                  <b>{k.regel}:</b> {k.meldung}
+                  <b>{k.titel}:</b> {k.meldung}
                 </li>
               ))}
             </ul>
