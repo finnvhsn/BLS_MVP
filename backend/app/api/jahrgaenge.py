@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ValidationError
-from sqlmodel import Session, delete, select
+from sqlmodel import Session, delete, func, select
 
 from ..core.konfiguration import JahrgangsKonfiguration, standard_konfiguration
 from ..core.protokoll import protokoll_lesen, protokollieren
@@ -37,6 +37,45 @@ def jahrgang_laden(session: Session, jahrgang_id: int) -> Jahrgang:
     if jahrgang is None:
         raise HTTPException(status_code=404, detail="Jahrgang nicht gefunden.")
     return jahrgang
+
+
+def letzter_planungsstand(session: Session, jahrgang_id: int) -> Planungsstand | None:
+    """„Der aktuelle Plan“ eines Jahrgangs — für Planungsansicht, Umbuchung,
+    Export und Druck dieselbe Antwort.
+
+    Zweitschlüssel id: bei gleicher Versionsnummer entscheidet der jüngere
+    Datensatz, sonst hinge das Ergebnis von der Sortierlaune der Datenbank ab
+    und Kontrolle, Export und Druck könnten verschiedene Stände zeigen.
+    """
+    return session.exec(
+        select(Planungsstand).where(Planungsstand.jahrgang_id == jahrgang_id)
+        .order_by(Planungsstand.version.desc(), Planungsstand.id.desc())
+    ).first()
+
+
+def naechste_version(session: Session, jahrgang_id: int) -> int:
+    """Fortlaufend je Jahrgang — auch für Vollberechnungen, die keinen Bestand
+    erben. Andernfalls bekäme jede Vollberechnung erneut die Version 1 und der
+    Jahrgang hätte mehrere gleich nummerierte Stände. Einzige Vergabestelle."""
+    hoechste = session.exec(
+        select(func.max(Planungsstand.version))
+        .where(Planungsstand.jahrgang_id == jahrgang_id)
+    ).one()
+    return (hoechste or 0) + 1
+
+
+def stand_laden(session: Session, jahrgang_id: int, stand_id: int | None) -> Planungsstand:
+    """Ohne ``stand_id`` der aktuelle Stand, sonst der benannte — der aber zum
+    Jahrgang gehören muss, sonst wäre ein fremder Plan les- und druckbar."""
+    if stand_id is None:
+        stand = letzter_planungsstand(session, jahrgang_id)
+    else:
+        stand = session.get(Planungsstand, stand_id)
+        if stand is not None and stand.jahrgang_id != jahrgang_id:
+            stand = None
+    if stand is None:
+        raise HTTPException(status_code=404, detail="Kein Planungsstand vorhanden — zuerst berechnen.")
+    return stand
 
 
 def planungsstaende_entfernen(session: Session, jahrgang_id: int) -> dict[str, int]:

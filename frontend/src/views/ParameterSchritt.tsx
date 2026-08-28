@@ -41,7 +41,7 @@ export function ParameterSchritt({ jahrgangId }: { jahrgangId: number }) {
       <div className="zeile">
         <div className="karte">
           <h3 style={{ marginTop: 0 }}>Tages-Zeitmodell</h3>
-          <div className="zeile">
+          <div className="feldgruppe">
             <label className="feld">
               <span>Beginn</span>
               <input
@@ -59,18 +59,6 @@ export function ParameterSchritt({ jahrgangId }: { jahrgangId: number }) {
                 value={zm.tag_ende}
                 onChange={(e) =>
                   setKonf({ ...konf, zeitmodell: { ...zm, tag_ende: e.target.value } })
-                }
-              />
-            </label>
-            <label className="feld">
-              <span>Vorbereitungspuffer Gruppe (Min.)</span>
-              <input
-                type="number"
-                min={0}
-                step={15}
-                value={zm.puffer_min}
-                onChange={(e) =>
-                  setKonf({ ...konf, zeitmodell: { ...zm, puffer_min: Number(e.target.value) } })
                 }
               />
             </label>
@@ -93,15 +81,15 @@ export function ParameterSchritt({ jahrgangId }: { jahrgangId: number }) {
           <p className="hinweis">
             Alle Zuweisungen liegen vollständig innerhalb dieses Fensters. Die
             <b> Mindestpause</b> ist die Wegzeit für den Raumwechsel und gilt zwischen
-            allen Terminen einer Person; der <b>Vorbereitungspuffer</b> gilt zusätzlich
-            nur vor dem Gruppenvortrag (Kaffeepause). Beide Werte wirken nur in
-            Schritten von 15&nbsp;Minuten — das ist das Zeitraster der Planung.
+            allen Terminen einer Person. Sie wirkt nur in Schritten von
+            15&nbsp;Minuten — das ist das Zeitraster der Planung, andere Werte
+            werden abgelehnt.
           </p>
         </div>
 
         <div className="karte">
           <h3 style={{ marginTop: 0 }}>Gruppen &amp; Berechnung</h3>
-          <div className="zeile">
+          <div className="feldgruppe">
             <label className="feld">
               <span>Gruppengröße Bewerbende</span>
               <input

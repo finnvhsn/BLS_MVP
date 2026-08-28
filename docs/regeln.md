@@ -26,6 +26,7 @@ Rücksteller und Absagen werden importiert und mitgeführt, aber nicht verplant.
 | H7 | Vollständigkeit & Tagesbindung | Prüfung ausschließlich am in Access zugeteilten Tag (`tag`-Feld, Pflicht); dort alle konfigurierten Formate genau einmal. |
 | H8 | Formatdauern & Zeitmodell | Konfigurierte Dauern eingehalten; alles innerhalb des Tagesfensters (Default 10:00–17:15); Thesenvortrag blockt die gesamte Gruppe für den vollen Block. |
 | H9 | Regeln je Konstellation | Prüfergruppen dürfen über den Tag wechseln; H1–H4 werden je Prüfungsereignis (= je Konstellation) geprüft. |
+| H10 | Mindestpause zwischen Terminen | Zwischen zwei aufeinanderfolgenden Terminen derselben bewerbenden Person liegt mindestens die konfigurierte Mindestpause — die Wegzeit von Raum zu Raum. Echte Überschneidungen meldet H5. |
 
 ## Weiche Regeln / Optimierungsziele (werden maximiert, Abweichungen ausgewiesen)
 
@@ -35,7 +36,7 @@ Rücksteller und Absagen werden importiert und mitgeführt, aber nicht verplant.
 | W2 | Ca. 12 Bewerbende je Prüfer:in, gleichmäßig verteilt | Durchschnitt, Min/Max, Streuung |
 | W3 | Diverse Bewerbendengruppen (Geschlecht, Studiengang), zufallsbasiert | Diversitäts-Score je Gruppe |
 | W4 | Gemischte Prüfergruppen (Geschlecht) | Anteil gemischter Prüfergruppen |
-| W5 | Wartezeiten minimieren | Wartezeit je Bewerber:in, Summe, Maximum |
+| W5 | Wartezeiten minimieren | Wartezeit je Bewerber:in, Summe, Maximum — abzüglich der Mindestpause, die als Wegzeit unvermeidbar ist und daher nicht als Warten zählt |
 | W6 | Stabilität bei Neuberechnung | erhalten / entfallen / neu |
 
 ## Parameter (über die UI je Jahrgang konfigurierbar, F_OM_010)
@@ -43,8 +44,7 @@ Rücksteller und Absagen werden importiert und mitgeführt, aber nicht verplant.
 | Parameter | Default | Bedeutung |
 |---|---|---|
 | Tagesfenster | 10:00 – 17:15 | Harte Grenze für alle Zuweisungen (H8) |
-| Mindestpause zwischen Terminen | 15 min | Wegzeit für den Raumwechsel; gilt zwischen **allen** Terminen einer Person. Muss ein Vielfaches von 15 min sein (Zeitraster) — andere Werte werden beim Speichern abgelehnt. |
-| Vorbereitungspuffer Gruppe | 15 min | Zusätzliche Kaffeepause/Vorbereitungszeit **vor Gruppenformaten**. Wirksam wird der jeweils größere der beiden Werte. Achtung: rasterfremde Werte (z. B. 10) bleiben hier aus historischen Gründen erlaubt, sind aber **wirkungslos** — die Belegungsprüfung läuft auf dem 15-Minuten-Raster. |
+| Mindestpause zwischen Terminen | 15 min | Wegzeit für den Raumwechsel; gilt zwischen **allen** Terminen einer Person und vor **jedem** Format gleich. Der Solver plant danach (H5-Belegung), die Kontrolle prüft sie als H10 — auch nach manueller Umbuchung. Muss ein Vielfaches von 15 min sein: Startzeiten und Formatdauern liegen auf diesem Raster, erreichbare Lücken sind daher 0, 15, 30 … Minuten. Ein Zwischenwert wie 10 verböte exakt dasselbe wie 15 und wird deshalb beim Speichern abgelehnt, statt eine Zahl anzuzeigen, die der Plan nicht abbildet. |
 | Formate | Einzel 1 (30 min), Einzel 2 (30 min), Gruppenarbeit (45 min), Thesenvortrag (150 min) | Dauer, Prüfergruppengröße, Senior-/Junior-Grenzen, Raumgröße je Format; Zusammenlegung der Einzelgespräche = Konfigurationsänderung |
 | Gruppengröße | 4 | Bewerbende je Gruppe (W3) |
 | Zeitbudget je Optimierungsschritt | 60 s | **Kein Gesamtlimit.** Eine Berechnung besteht aus drei Schritten je Prüfungstag (Zeitplanung, Raumvergabe, Prüfendenzuordnung); bei Relaxierung wird ein Schritt einmal wiederholt. Daraus folgt die Gesamtdauer — im schlechtesten Fall rund 9 min, typisch 3 min beim realen Mengengerüst (NF_003: ≤ 15 min). Werte über 60 s bringen kein besseres Ergebnis; die Raumvergabe nutzt höchstens 30 s, weil sie ein einfaches Matching ist. |

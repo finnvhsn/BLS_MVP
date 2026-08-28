@@ -124,6 +124,33 @@ def test_kennzahlen_ausgewiesen(geloest):
     assert "w5_wartezeit_summe_min" in kz and "w5_wartezeit_je_bewerber" in kz
 
 
+def test_mindestpause_zwischen_allen_terminen(geloest):
+    """Jede Person kommt von Raum A nach Raum B: zwischen zwei
+    aufeinanderfolgenden Terminen liegt mindestens die Mindestpause.
+
+    Der Nachweis, den zuvor nur ein Messlauf über das reale Mengengerüst
+    lieferte (Konfiguration mit 0 ⇒ hunderte lückenlose Übergänge, mit 15 ⇒
+    keiner). Hier deterministisch und in Sekunden — und über H10 im
+    Regelkatalog auch gegen künftige Drift abgesichert.
+    """
+    kontext, _, ergebnis = geloest
+    zm = kontext.konfiguration.zeitmodell
+    uebergaenge = 0
+    for info in kontext.planbare_bewerber():
+        termine = sorted(ergebnis.plan.fuer_bewerber(info.id), key=lambda z: z.start_min)
+        for vorher, nachher in zip(termine, termine[1:]):
+            luecke = nachher.start_min - vorher.ende_min
+            noetig = zm.mindestpause_min
+            assert luecke >= noetig, (
+                f"{info.anzeigename}: nur {luecke} min zwischen "
+                f"{vorher.format_key} und {nachher.format_key} (nötig: {noetig})"
+            )
+            uebergaenge += 1
+    # Ohne Übergänge wäre die Zusicherung wertlos: 4 Formate ⇒ 3 je Person
+    assert uebergaenge == 3 * len(kontext.planbare_bewerber())
+    assert zm.mindestpause_min > 0
+
+
 def test_befangenheiten_niemals_zugewiesen(geloest):
     kontext, _, ergebnis = geloest
     for z in ergebnis.plan.zuweisungen:

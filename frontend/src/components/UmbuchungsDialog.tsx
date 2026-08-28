@@ -63,7 +63,7 @@ export function UmbuchungsDialog({
   return (
     <div className="dialog-hintergrund" onClick={onSchliessen}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
-        <h2>Umbuchung: {zuweisung.format_name}</h2>
+        <h2>{zuweisung.format_name}</h2>
         <p className="hinweis">
           {zuweisung.tag}, {zuweisung.start}–{zuweisung.ende} · Raum {zuweisung.raumnummer}
           {zuweisung.gruppe ? ` · ${zuweisung.gruppe}` : ""}

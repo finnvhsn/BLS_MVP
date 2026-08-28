@@ -1,4 +1,4 @@
-"""M2-Tests: Regelkatalog H1–H9 (Positiv/Negativ je Regel) und W-Metriken.
+"""M2-Tests: Regelkatalog H1–H10 (Positiv/Negativ je Regel) und W-Metriken.
 
 Aufbau: ein kleines, vollständig gültiges Mini-Verfahren (4 Bewerbende einer
 Gruppe am Fr, 12 Senior + 2 Junior, 2 kleine + 1 großer Raum). Jeder Testfall
@@ -94,21 +94,25 @@ def gueltiger_plan() -> Plan:
     """Vollständiger, regelkonformer Plan für die 4 Bewerbenden der Gruppe 1.
 
     8 Kontakte je Person: Einzel (2×1 Senior) + Gruppenarbeit (3er-Panel mit
-    1 Junior) + Thesenvortrag (3er-Panel mit 1 Junior)."""
+    1 Junior) + Thesenvortrag (3er-Panel mit 1 Junior).
+
+    Zwischen zwei Terminen derselben Person liegen mindestens 15 min — die
+    Mindestpause für den Raumwechsel (H10)."""
     return Plan(zuweisungen=[
         # Thesenvortrag: gesamte Gruppe, 2,5-h-Block (H8), Panel S9/S10/J13
         _z("thesenvortrag", 600, 150, 3, {1, 2, 3, 4}, {9, 10, 13}, gruppe=1),
         # Gruppenarbeit nach 15 min Kaffeepause, Panel S11/S12/J14
         _z("gruppenarbeit", 765, 45, 3, {1, 2, 3, 4}, {11, 12, 14}, gruppe=1),
-        # Einzelgespräche: je Person 2 verschiedene Senior-Prüfende
-        _z("einzel_1", 810, 30, 1, {1}, {1}),
-        _z("einzel_2", 840, 30, 1, {1}, {5}),
-        _z("einzel_1", 870, 30, 1, {3}, {3}),
-        _z("einzel_2", 900, 30, 1, {3}, {7}),
-        _z("einzel_1", 810, 30, 2, {2}, {2}),
-        _z("einzel_2", 840, 30, 2, {2}, {6}),
-        _z("einzel_1", 870, 30, 2, {4}, {4}),
-        _z("einzel_2", 900, 30, 2, {4}, {8}),
+        # Einzelgespräche: je Person 2 verschiedene Senior-Prüfende,
+        # je 15 min Weg dazwischen
+        _z("einzel_1", 825, 30, 1, {1}, {1}),
+        _z("einzel_2", 870, 30, 1, {1}, {5}),
+        _z("einzel_1", 915, 30, 1, {3}, {3}),
+        _z("einzel_2", 960, 30, 1, {3}, {7}),
+        _z("einzel_1", 825, 30, 2, {2}, {2}),
+        _z("einzel_2", 870, 30, 2, {2}, {6}),
+        _z("einzel_1", 915, 30, 2, {4}, {4}),
+        _z("einzel_2", 960, 30, 2, {4}, {8}),
     ])
 
 
@@ -203,7 +207,7 @@ def test_h4_junior_im_einzelgespraech(gueltiger_plan, kontext):
 def test_h5_bewerber_doppelt_verplant(gueltiger_plan, kontext):
     # Einzel 2 von Bewerber 1 parallel zu Einzel 1 (anderer Raum, andere:r Prüfer:in)
     plan = gueltiger_plan.ersetzt(3, replace(
-        gueltiger_plan.zuweisungen[3], start_min=810, ende_min=840, raum_id=2
+        gueltiger_plan.zuweisungen[3], start_min=825, ende_min=855, raum_id=2
     ))
     konflikte = plan_validieren(plan, kontext)
     assert any(k.regel == "H5" and k.bewerber_ids == [1] for k in konflikte)
@@ -288,7 +292,9 @@ def test_h7_doppeltes_format(gueltiger_plan, kontext):
 # ---------------------------------------------------------------------------
 
 def test_h8_falsche_dauer(gueltiger_plan, kontext):
-    plan = gueltiger_plan.ersetzt(2, replace(gueltiger_plan.zuweisungen[2], ende_min=855))
+    # Letztes Einzelgespräch des Tages auf 45 statt 30 min gedehnt — dahinter ist
+    # frei, es entsteht also keine Doppelbelegung, die die Meldung überlagert.
+    plan = gueltiger_plan.ersetzt(5, replace(gueltiger_plan.zuweisungen[5], ende_min=1005))
     konflikte = plan_validieren(plan, kontext)
     assert any(k.regel == "H8" and "45 min" in k.meldung for k in konflikte)
 
@@ -308,6 +314,61 @@ def test_h8_thesenvortrag_blockt_gesamte_gruppe(gueltiger_plan, kontext):
     ))
     konflikte = plan_validieren(plan, kontext)
     assert any(k.regel == "H8" and k.bewerber_ids == [4] for k in konflikte)
+
+
+# ---------------------------------------------------------------------------
+# H10 — Mindestpause zwischen Terminen
+# ---------------------------------------------------------------------------
+
+def test_h10_zu_knapper_anschluss(gueltiger_plan, kontext):
+    """Einzel 2 direkt im Anschluss an Einzel 1 — keine Zeit für den Weg von
+    Raum 1 nach Raum 1… und erst recht nicht in einen anderen Raum."""
+    plan = gueltiger_plan.ersetzt(3, replace(
+        gueltiger_plan.zuweisungen[3], start_min=855, ende_min=885
+    ))
+    konflikte = [k for k in plan_validieren(plan, kontext) if k.regel == "H10"]
+    assert len(konflikte) == 1
+    assert konflikte[0].bewerber_ids == [1]
+    assert konflikte[0].zuweisungen == [2, 3]
+    assert "nur 0 min" in konflikte[0].meldung and "nötig: 15 min" in konflikte[0].meldung
+
+
+def test_h10_genau_die_mindestpause_ist_zulaessig(gueltiger_plan, kontext):
+    """Die Grenze selbst ist erlaubt — der gültige Plan hält überall genau
+    15 min ein und darf keinen Konflikt erzeugen."""
+    assert [k for k in plan_validieren(gueltiger_plan, kontext) if k.regel == "H10"] == []
+
+
+def test_h10_folgt_der_konfiguration(gueltiger_plan, kontext):
+    """Mit abgeschalteter Mindestpause ist derselbe knappe Anschluss zulässig —
+    die Regel liest den Wert aus der Konfiguration, sie ist nicht verdrahtet."""
+    kontext.konfiguration.zeitmodell.mindestpause_min = 0
+    plan = gueltiger_plan.ersetzt(3, replace(
+        gueltiger_plan.zuweisungen[3], start_min=855, ende_min=885
+    ))
+    assert [k for k in plan_validieren(plan, kontext) if k.regel == "H10"] == []
+
+
+def test_h10_ueberschneidung_bleibt_h5(gueltiger_plan, kontext):
+    """Echte Doppelbelegung meldet H5 — H10 darf sie nicht ein zweites Mal
+    aufführen, sonst steht jeder Fehler doppelt in der Konfliktliste."""
+    plan = gueltiger_plan.ersetzt(3, replace(
+        gueltiger_plan.zuweisungen[3], start_min=825, ende_min=855, raum_id=2
+    ))
+    regeln = _regeln(k for k in plan_validieren(plan, kontext) if 1 in k.bewerber_ids)
+    assert "H5" in regeln and "H10" not in regeln
+
+
+def test_h10_gilt_vor_jedem_format_gleich(gueltiger_plan, kontext):
+    """Ein einziger Wert für alle Formate: Wird die Pause auf 30 min gestellt,
+    reichen die 15 min des gültigen Plans nirgends mehr — auch nicht vor dem
+    Gruppenformat, das früher einen eigenen Puffer hatte."""
+    kontext.konfiguration.zeitmodell.mindestpause_min = 30
+    konflikte = [k for k in plan_validieren(gueltiger_plan, kontext) if k.regel == "H10"]
+    # Bewerber 1 und 2 haben je 3 Übergänge à 15 min, Bewerber 3 und 4 nur je 2
+    # (zwischen Gruppenarbeit und ihrem ersten Einzelgespräch liegen 105 min).
+    assert len(konflikte) == 10
+    assert all("nötig: 30 min" in k.meldung for k in konflikte)
 
 
 # ---------------------------------------------------------------------------
@@ -345,10 +406,10 @@ def test_w3_diversitaet():
 
 def test_w5_wartezeiten(gueltiger_plan, kontext):
     wartezeiten = w5_wartezeiten(gueltiger_plan, kontext)
-    # Bewerber 1: lückenlos (Pausen ≤ 15-min-Puffer) → 0 min
+    # Bewerber 1: nur Mindestpausen (15 min ≤ 15-min-Puffer) → 0 min
     assert wartezeiten[1] == 0
-    # Bewerber 3: Lücke 810→870 = 60 min − 15 Puffer = 45 min
-    assert wartezeiten[3] == 45
+    # Bewerber 3: Lücke 810→915 = 105 min − 15 Puffer = 90 min
+    assert wartezeiten[3] == 90
 
 
 def test_w6_stabilitaet(gueltiger_plan):
@@ -363,7 +424,7 @@ def test_kennzahlen(gueltiger_plan, kontext):
     kennzahlen = kennzahlen_berechnen(gueltiger_plan, kontext)
     assert kennzahlen["w1_erfuellt"] == 4
     assert kennzahlen["w1_abweichler"] == {}
-    assert kennzahlen["w5_wartezeit_max_min"] == 45
+    assert kennzahlen["w5_wartezeit_max_min"] == 90
     assert kennzahlen["anzahl_geplante_bewerber"] == 4
 
 
@@ -381,6 +442,6 @@ def test_aenderung_validieren_meldet_konflikt(gueltiger_plan, kontext):
 
 
 def test_aenderung_validieren_gueltige_umbuchung(gueltiger_plan, kontext):
-    # S2 hat Bewerber 1 noch nie gesehen und ist um 840 frei → kein Konflikt
+    # S2 hat Bewerber 1 noch nie gesehen und ist um 870 frei → kein Konflikt
     neue = replace(gueltiger_plan.zuweisungen[3], pruefer_ids=frozenset({2}))
     assert aenderung_validieren(gueltiger_plan, kontext, 3, neue) == []

@@ -30,7 +30,7 @@ dokumentiert.
 | `tag` | **ja** | `Fr` / `Sa` | **Tageszuteilung aus Access (H7).** Fehlender oder ungültiger Wert ⇒ Validierungsfehler — der Tag wird niemals geraten. |
 | `geschlecht` | ja | `w` / `m` / `d` | |
 | `studiengang` | ja | Text | z. B. „Rechtswissenschaft“ |
-| `ruecksteller` | ja | `ja` / `nein` | Rücksteller-Kennzeichen. Pflichtspalte des Austauschformats, wird importiert und mitgeführt, aber von **keiner** Regel ausgewertet — die Planbarkeit hängt allein an `zugelassen`, `rueckmeldestatus` und dem Aktiv-Status. |
+| `ruecksteller` | nein | `ja` / `nein` | Rücksteller-Kennzeichen; leer oder fehlende Spalte ⇒ `nein`. Wird importiert und mitgeführt, aber von **keiner** Regel ausgewertet — die Planbarkeit hängt allein an `zugelassen`, `rueckmeldestatus` und dem Aktiv-Status. Der Access-Export liefert die Spalte weiterhin mit; optional ist sie, damit sich Testdateien von Hand bauen lassen. Ein Wert außerhalb von `ja`/`nein` bleibt ein Fehler. |
 | `rangfolge` | nein | Ganzzahl | Rangliste (verbleibt fachlich in Access) |
 | `rueckmeldestatus` | nein | `Zusage` / `Absage` / `Alternativtermin` / `Offen` | leer ⇒ `Offen` |
 | `zugelassen` | nein | `ja` / `nein` | leer ⇒ `ja`; muss eindeutig hervorgehen, wer zum mündlichen Verfahren zugelassen ist |

@@ -45,15 +45,25 @@ cd backend
 ../.venv/bin/python -m pytest -m langsam     # Volllast: reales Mengengerüst (AK1/AK3), Minuten-Laufzeit
 ```
 
-Zentrale Absicherung: Alle harten Regeln H1–H9 sind einzeln getestet
+Zentrale Absicherung: Alle harten Regeln H1–H10 sind einzeln getestet
 (`tests/test_m2_regeln.py`), und der Property-Test „jeder Solver-Output
 besteht den Validator“ verhindert Regel-Drift zwischen Solver und
 manueller Validierung.
 
 ## Testdaten
 
+Zwei fertige Datensätze liegen unter [`testdaten/`](testdaten/), je vier CSV in
+der Importreihenfolge (`bewerbende`, `pruefende`, `raeume`, `befangenheiten`):
+
+| Ordner | Umfang | Rechenzeit |
+|---|---|---|
+| `demo-klein/` | 48 Bewerbende (29 Zusagen), 19 Prüfende, 10 Räume | schnell — für Vorführungen; dafür in Schritt 2 das Zeitbudget je Optimierungsschritt auf 15 s stellen |
+| `realistisch/` | 262 / 87 / 34 / 15 — das reale Mengengerüst | ~3 min |
+
+Neu erzeugen (deterministisch über `--seed`):
+
 ```bash
-cd backend && ../.venv/bin/python -m app.io.testdaten --ziel ../testdaten --seed 42
+cd backend && ../.venv/bin/python -m app.io.testdaten --ziel ../testdaten/realistisch --seed 42
 ```
 
 Erzeugt das reale Mengengerüst (262 Bewerbende mit Tageszuteilung 131 Fr /
@@ -63,21 +73,23 @@ importierbare CSVs im dokumentierten Austauschformat.
 ## Aufbau
 
 ```
-backend/app/core/rules.py      # H1–H9 + W1–W6: die EINZIGE Quelle der Wahrheit
+backend/app/core/rules.py      # H1–H10 + W1–W6: die EINZIGE Quelle der Wahrheit
 backend/app/core/validator.py  # Ganzplan- und Was-wäre-wenn-Validierung
 backend/app/core/grouping.py   # Stufe 1: zufallsbasierte, diverse Gruppeneinteilung
 backend/app/core/solver.py     # Stufe 2: CP-SAT (Zeiten/Räume → Prüfende), Warmstart
 backend/app/io/                # CSV-Import/-Export, Testdaten, PDF (WeasyPrint)
 backend/app/api/               # REST-Router entlang des 5-Schritte-Workflows
 frontend/                      # React + Vite + TS, deutschsprachige UI
+testdaten/                     # fertige Import-CSVs: demo-klein/ und realistisch/
 docs/formats.md                # versionierte CSV-Austauschformate (NF_006)
 docs/regeln.md                 # Regel- und Parameterdokumentation (NF_010)
-docs/offene-punkte.md          # ausstehende Verifikation und offene Entscheidungen
+docs/offene-punkte.md          # Projektstand und offene Punkte
 ```
 
 > **Vor dem Weiterarbeiten:** [`docs/offene-punkte.md`](docs/offene-punkte.md)
-> lesen — die Backend-Suite ist seit dem letzten Fix nicht gelaufen, und die
-> Gegenprobe der Mindestpause steht noch aus.
+> lesen. Stand 27.08.2026: 88 Tests grün, Frontend gebaut. Offen ist ein
+> fachlicher Punkt — die Mindestpause gilt bisher nur für Bewerbende, nicht für
+> Prüfende; der Weg dorthin ist dort beschrieben und bewusst zurückgestellt.
 
 Scope-Hinweis: Umgesetzt sind ausschließlich Anforderungen der Kennzeichnung
 **27**; „28“-Themen (API-Integrationen, SSO, weitere Access-Ablösung) sind

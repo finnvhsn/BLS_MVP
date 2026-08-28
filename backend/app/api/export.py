@@ -15,7 +15,7 @@ from ..core.security import aktueller_benutzer
 from ..db.database import daten_verzeichnis, db_datei, engine, get_session
 from ..db.models import Benutzer, ExportLauf, Planungsstand
 from ..io.exporter import plan_als_csv
-from .jahrgaenge import jahrgang_laden, konfiguration_laden
+from .jahrgaenge import jahrgang_laden, konfiguration_laden, stand_laden
 
 router = APIRouter(
     prefix="/api", tags=["Export"],
@@ -39,17 +39,7 @@ def export_erstellen(
     """Erzeugt einen neuen, versionierten Export des (letzten) Planungsstands.
     Wiederholte Exporte nach Neuberechnung sind ausdrücklich vorgesehen."""
     jahrgang = jahrgang_laden(session, jahrgang_id)
-    if stand_id is None:
-        stand = session.exec(
-            select(Planungsstand).where(Planungsstand.jahrgang_id == jahrgang_id)
-            .order_by(Planungsstand.version.desc())
-        ).first()
-    else:
-        stand = session.get(Planungsstand, stand_id)
-        if stand is not None and stand.jahrgang_id != jahrgang_id:
-            stand = None
-    if stand is None:
-        raise HTTPException(status_code=404, detail="Kein Planungsstand vorhanden — zuerst berechnen.")
+    stand = stand_laden(session, jahrgang_id, stand_id)
 
     konfiguration = konfiguration_laden(session, jahrgang_id)
     kontext = kontext_aus_db(session, jahrgang_id, konfiguration)

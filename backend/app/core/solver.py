@@ -230,12 +230,9 @@ def _phase_a(
         )
 
     # H5: keine Doppelbelegung je Bewerber:in. Jedes Ereignis belegt zusätzlich
-    # die Mindestpause davor (Wegzeit für den Raumwechsel); Gruppenformate
-    # mindestens ihren Vorbereitungspuffer (Kaffeepause). Über den Vorlauf
-    # erzwingt dieselbe Bedingung damit auch den Abstand zum Vortermin.
-    def vorlauf_fuer(i: int) -> int:
-        gruppen_puffer = zm.puffer_min if ereignisse[i].typ == "gruppe" else 0
-        return max(zm.mindestpause_min, gruppen_puffer)
+    # die Mindestpause davor (Wegzeit für den Raumwechsel). Über den Vorlauf
+    # erzwingt dieselbe Bedingung damit auch den Abstand zum Vortermin (H10).
+    pause = zm.mindestpause_min
 
     nach_bewerber: dict[int, list[int]] = defaultdict(list)
     for i, e in enumerate(ereignisse):
@@ -243,9 +240,7 @@ def _phase_a(
             nach_bewerber[bid].append(i)
     for bid, indizes in nach_bewerber.items():
         for tick in ticks:
-            model.Add(sum(
-                occ(i, tick, vorlauf=vorlauf_fuer(i)) for i in indizes
-            ) <= 1)
+            model.Add(sum(occ(i, tick, vorlauf=pause) for i in indizes) <= 1)
 
     # H6 (Kapazität): je Zeitpunkt höchstens so viele Ereignisse je Raumgröße,
     # wie Räume verfügbar sind (konkrete Raumvergabe folgt nach Phase A)

@@ -85,7 +85,6 @@ export interface Konfiguration {
   zeitmodell: {
     tag_start: string;
     tag_ende: string;
-    puffer_min: number;
     mindestpause_min: number;
   };
   formate: FormatKonfiguration[];

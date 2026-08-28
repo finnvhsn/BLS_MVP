@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ApiFehler, get, post } from "./api";
+import { ApiFehler, del, get, post } from "./api";
 import { Anmeldung } from "./views/Anmeldung";
 import { ExportSchritt } from "./views/ExportSchritt";
 import { ImportSchritt } from "./views/ImportSchritt";
@@ -60,6 +60,27 @@ export function App() {
     }
   };
 
+  const jahrgangLoeschen = async () => {
+    const jahrgang = jahrgaenge.find((j) => j.id === jahrgangId);
+    if (!jahrgang) return;
+    // NF_001: Das Löschen entfernt alle personenbezogenen Daten des Jahrgangs
+    // und ist nicht rückholbar — deshalb die Rückfrage mit der Bezeichnung.
+    const sicher = window.confirm(
+      `Jahrgang „${jahrgang.bezeichnung}“ endgültig löschen?\n\n` +
+        "Bewerbende, Prüfende, Räume, Befangenheiten, alle Planungsstände und " +
+        "das Protokoll dieses Jahrgangs werden dabei entfernt. " +
+        "Das lässt sich nicht rückgängig machen."
+    );
+    if (!sicher) return;
+    try {
+      await del(`/api/jahrgaenge/${jahrgang.id}`);
+      await jahrgaengeLaden(); // wählt selbst einen verbleibenden Jahrgang
+      setSchritt(0);
+    } catch (e) {
+      alert(e instanceof ApiFehler ? e.message : "Jahrgang konnte nicht gelöscht werden.");
+    }
+  };
+
   const abmelden = async () => {
     await post("/api/auth/logout");
     setBenutzer(null);
@@ -94,6 +115,14 @@ export function App() {
         />
         <button className="klein sekundaer" onClick={jahrgangAnlegen}>
           Anlegen
+        </button>
+        <button
+          className="klein gefahr"
+          onClick={jahrgangLoeschen}
+          disabled={jahrgangId === null}
+          title="Löscht den ausgewählten Jahrgang mit allen Daten"
+        >
+          Löschen
         </button>
         <button className="klein sekundaer" onClick={() => setProtokollOffen(true)}>
           Protokoll

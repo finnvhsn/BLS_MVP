@@ -9,7 +9,7 @@ from dataclasses import replace
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlmodel import Session, delete, func, select
+from sqlmodel import Session, delete, select
 
 from ..core import grouping, solver
 from ..core.konfiguration import hhmm, minuten
@@ -29,7 +29,13 @@ from ..db.models import (
     ZuweisungBewerber,
     ZuweisungPruefer,
 )
-from .jahrgaenge import jahrgang_laden, konfiguration_laden
+from .jahrgaenge import (
+    jahrgang_laden,
+    konfiguration_laden,
+    letzter_planungsstand,
+    naechste_version,
+    stand_laden,
+)
 
 router = APIRouter(
     prefix="/api/jahrgaenge/{jahrgang_id}", tags=["Planung"],
@@ -159,27 +165,6 @@ class BerechnungsDaten(BaseModel):
     synchron: bool = False       # True: blockierend (Tests/Skripte)
 
 
-def _letzter_planungsstand(session: Session, jahrgang_id: int) -> Planungsstand | None:
-    # Zweitschlüssel id: bei gleicher Versionsnummer entscheidet der jüngere
-    # Datensatz, sonst wäre "der aktuelle Plan" von der Sortierlaune der
-    # Datenbank abhängig.
-    return session.exec(
-        select(Planungsstand).where(Planungsstand.jahrgang_id == jahrgang_id)
-        .order_by(Planungsstand.version.desc(), Planungsstand.id.desc())
-    ).first()
-
-
-def _naechste_version(session: Session, jahrgang_id: int) -> int:
-    """Fortlaufend je Jahrgang — auch für Vollberechnungen, die keinen Bestand
-    erben. Andernfalls bekäme jede Vollberechnung erneut die Version 1 und der
-    Jahrgang hätte mehrere gleich nummerierte Stände."""
-    hoechste = session.exec(
-        select(func.max(Planungsstand.version))
-        .where(Planungsstand.jahrgang_id == jahrgang_id)
-    ).one()
-    return (hoechste or 0) + 1
-
-
 def _berechnung_ausfuehren(jahrgang_id: int, neuberechnung: bool, benutzername: str) -> None:
     with Session(engine()) as session:
         try:
@@ -187,7 +172,7 @@ def _berechnung_ausfuehren(jahrgang_id: int, neuberechnung: bool, benutzername: 
             kontext = kontext_aus_db(session, jahrgang_id, konfiguration)
             kontext = grouping.gruppen_auffuellen(kontext)  # Nachrücker (Szenario 3)
 
-            bestand_stand = _letzter_planungsstand(session, jahrgang_id) if neuberechnung else None
+            bestand_stand = letzter_planungsstand(session, jahrgang_id) if neuberechnung else None
             bestand = plan_aus_db(session, bestand_stand.id) if bestand_stand else None
 
             def fortschritt_melden(nr: int, gesamt: int, text: str) -> None:
@@ -216,7 +201,7 @@ def _berechnung_ausfuehren(jahrgang_id: int, neuberechnung: bool, benutzername: 
                     session.add(zeile)
             session.flush()
 
-            version = _naechste_version(session, jahrgang_id)
+            version = naechste_version(session, jahrgang_id)
             stand = Planungsstand(
                 jahrgang_id=jahrgang_id, version=version,
                 typ=PlanungsstandTyp.NEUBERECHNUNG if bestand else PlanungsstandTyp.VOLLBERECHNUNG,
@@ -310,22 +295,12 @@ def planungsstaende(jahrgang_id: int, session: Session = Depends(get_session)):
         {"id": p.id, "version": p.version, "typ": p.typ, "erstellt_am": p.erstellt_am,
          "seed": p.seed, "kennzahlen": p.kennzahlen}
         for p in session.exec(
+            # Zweitschlüssel wie in letzter_planungsstand — der oberste Eintrag
+            # der Liste ist derselbe Stand, den GET /plan zeigt.
             select(Planungsstand).where(Planungsstand.jahrgang_id == jahrgang_id)
-            .order_by(Planungsstand.version.desc())
+            .order_by(Planungsstand.version.desc(), Planungsstand.id.desc())
         )
     ]
-
-
-def _stand_laden(session: Session, jahrgang_id: int, stand_id: int | None) -> Planungsstand:
-    if stand_id is None:
-        stand = _letzter_planungsstand(session, jahrgang_id)
-    else:
-        stand = session.get(Planungsstand, stand_id)
-        if stand is not None and stand.jahrgang_id != jahrgang_id:
-            stand = None
-    if stand is None:
-        raise HTTPException(status_code=404, detail="Kein Planungsstand vorhanden — zuerst berechnen.")
-    return stand
 
 
 @router.get("/plan")
@@ -339,7 +314,7 @@ def plan_ansicht(
     Konflikte werden gegen den AKTUELLEN Datenstand berechnet — nachträgliche
     Datenänderungen (Absagen, Befangenheiten) werden sofort sichtbar (F_OM_015).
     """
-    stand = _stand_laden(session, jahrgang_id, stand_id)
+    stand = stand_laden(session, jahrgang_id, stand_id)
     konfiguration = konfiguration_laden(session, jahrgang_id)
     kontext = kontext_aus_db(session, jahrgang_id, konfiguration)
     plan = plan_aus_db(session, stand.id)
@@ -418,7 +393,7 @@ def umbuchen(
     """Manuelle Nachbearbeitung: Was-wäre-wenn-Validierung, Übernahme nur wenn
     regelkonform ODER bewusst bestätigt; jede Übernahme erzeugt einen neuen,
     versionierten Planungsstand (NF_010) und wird protokolliert (F_OM_012)."""
-    stand = _stand_laden(session, jahrgang_id, None)
+    stand = stand_laden(session, jahrgang_id, None)
     konfiguration = konfiguration_laden(session, jahrgang_id)
     kontext = kontext_aus_db(session, jahrgang_id, konfiguration)
     plan = plan_aus_db(session, stand.id)
@@ -457,7 +432,7 @@ def umbuchen(
     # Übernahme: neuer, versionierter Planungsstand (Kopie mit Änderung)
     neuer_plan = plan.ersetzt(index, neu)
     stand_neu = Planungsstand(
-        jahrgang_id=jahrgang_id, version=stand.version + 1,
+        jahrgang_id=jahrgang_id, version=naechste_version(session, jahrgang_id),
         typ=PlanungsstandTyp.MANUELL, basis_planungsstand_id=stand.id,
         seed=stand.seed, parameter=stand.parameter,
         kennzahlen=stand.kennzahlen, konflikte=konflikte_json,

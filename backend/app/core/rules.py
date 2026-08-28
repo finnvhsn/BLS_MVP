@@ -1,4 +1,4 @@
-"""Fachliche Regeln H1–H9 und W1–W6 — die **einzige Quelle der Wahrheit**.
+"""Fachliche Regeln H1–H10 und W1–W6 — die **einzige Quelle der Wahrheit**.
 
 Jede harte Regel existiert genau einmal: als Prüf-Funktion (pure function)
 über einem Plan. Genutzt von
@@ -32,7 +32,7 @@ from .plan import Plan, PlanKontext, PlanZuweisung
 
 @dataclass
 class Konflikt:
-    regel: str                       # "H1" … "H9"
+    regel: str                       # "H1" … "H10"
     meldung: str                     # deutsche Begründung
     zuweisungen: list = field(default_factory=list)   # betroffene Plan-Indizes
     bewerber_ids: list = field(default_factory=list)
@@ -439,6 +439,46 @@ def pruefe_h9(plan: Plan, kontext: PlanKontext) -> list[Konflikt]:
     return []
 
 
+# ---------------------------------------------------------------------------
+# H10 — Mindestpause zwischen Terminen
+# ---------------------------------------------------------------------------
+
+def pruefe_h10(plan: Plan, kontext: PlanKontext) -> list[Konflikt]:
+    """Zwischen zwei aufeinanderfolgenden Terminen derselben bewerbenden Person
+    liegt mindestens die konfigurierte Mindestpause — die Wegzeit von Raum A zu
+    Raum B, für jedes Format gleich (``zeitmodell.mindestpause_min``, dieselbe
+    Zahl, aus der der Solver seine Belegungsbedingung baut).
+
+    Echte Überschneidungen bleiben H5 überlassen — sonst erschiene jede
+    Doppelbelegung zweimal in der Konfliktliste.
+    """
+    konflikte = []
+    noetig = kontext.konfiguration.zeitmodell.mindestpause_min
+    nach_bewerber_tag: dict[tuple, list[int]] = defaultdict(list)
+    for i, z in enumerate(plan.zuweisungen):
+        for bid in z.bewerber_ids:
+            nach_bewerber_tag[(bid, z.tag)].append(i)
+
+    for (bid, tag), indizes in sorted(nach_bewerber_tag.items(), key=lambda p: (p[0][0], p[0][1].value)):
+        indizes.sort(key=lambda i: (plan.zuweisungen[i].start_min, plan.zuweisungen[i].ende_min))
+        for i, j in zip(indizes, indizes[1:]):
+            vorher, nachher = plan.zuweisungen[i], plan.zuweisungen[j]
+            luecke = nachher.start_min - vorher.ende_min
+            if 0 <= luecke < noetig:
+                konflikte.append(Konflikt(
+                    regel="H10",
+                    meldung=(
+                        f"Mindestpause unterschritten: {_bname(kontext, bid)} hat am "
+                        f"{tag.value} zwischen {hhmm(vorher.ende_min)} und "
+                        f"{hhmm(nachher.start_min)} nur {luecke} min für den "
+                        f"Raumwechsel (nötig: {noetig} min)."
+                    ),
+                    zuweisungen=[i, j],
+                    bewerber_ids=[bid],
+                ))
+    return konflikte
+
+
 HARTE_REGELN: dict[str, Regel] = {
     r.id: r for r in [
         Regel("H1", "Keine Doppelbegegnung",
@@ -463,6 +503,9 @@ HARTE_REGELN: dict[str, Regel] = {
               "blockt die gesamte Gruppe.", pruefe_h8),
         Regel("H9", "Regeln je Konstellation",
               "H1–H4 gelten für jede Prüfergruppen-Konstellation.", pruefe_h9),
+        Regel("H10", "Mindestpause zwischen Terminen",
+              "Zwischen zwei Terminen derselben bewerbenden Person liegt mindestens "
+              "die konfigurierte Mindestpause (Wegzeit für den Raumwechsel).", pruefe_h10),
     ]
 }
 
@@ -535,15 +578,20 @@ def w4_diversitaet_pruefergruppen(plan: Plan, kontext: PlanKontext) -> float:
 
 def w5_wartezeiten(plan: Plan, kontext: PlanKontext) -> dict[int, int]:
     """W5: Wartezeit in Minuten je bewerbender Person zwischen erster und
-    letzter Prüfung (Lücken abzüglich des konfigurierten Puffers)."""
-    puffer = kontext.konfiguration.zeitmodell.puffer_min
+    letzter Prüfung.
+
+    Abgezogen wird die Mindestpause: Sie ist Wegzeit, kein Warten, und fällt
+    zwischen jedem Terminpaar unvermeidbar an (H10). Als Kennzahl bleibt damit
+    genau die Zeit übrig, die sich durch bessere Planung noch einsparen ließe.
+    """
+    unvermeidbar = kontext.konfiguration.zeitmodell.mindestpause_min
     ergebnis = {}
     for info in kontext.planbare_bewerber():
         ereignisse = sorted(plan.fuer_bewerber(info.id), key=lambda z: z.start_min)
         wartezeit = 0
         for vorher, nachher in zip(ereignisse, ereignisse[1:]):
             luecke = nachher.start_min - vorher.ende_min
-            wartezeit += max(0, luecke - puffer)
+            wartezeit += max(0, luecke - unvermeidbar)
         ergebnis[info.id] = wartezeit
     return ergebnis
 

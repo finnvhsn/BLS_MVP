@@ -54,6 +54,37 @@ def test_bewerber_import_fehlender_tag_wird_gemeldet(session):
     assert ergebnis.anzahl_neu == 1
 
 
+def test_bewerber_import_ohne_ruecksteller_spalte(session):
+    """``ruecksteller`` ist optional (fehlend ⇒ nein) — das Kennzeichen wird von
+    keiner Regel ausgewertet, als Pflichtspalte erschwerte es nur den Import
+    handgebauter Dateien."""
+    csv_text = (
+        "bewerber_id;nachname;vorname;tag;geschlecht;studiengang\n"
+        "BW-1;Muster;Anna;Fr;w;Rechtswissenschaft\n"
+    )
+    ergebnis = importer.bewerbende_importieren(session, session.jahrgang_id, csv_text)
+    assert ergebnis.ok, ergebnis.fehler
+    b = session.exec(select(Bewerber).where(Bewerber.import_key == "BW-1")).one()
+    assert b.ruecksteller_kennzeichen is False
+
+
+def test_bewerber_import_ruecksteller_wird_weiter_ausgewertet(session):
+    """Wenn die Spalte da ist, zählt ihr Inhalt — und ein Unsinnswert bleibt
+    ein Fehler, statt still zu „nein“ zu werden."""
+    kopf = "bewerber_id;nachname;vorname;tag;geschlecht;studiengang;ruecksteller\n"
+    ergebnis = importer.bewerbende_importieren(
+        session, session.jahrgang_id, kopf + "BW-1;Muster;Anna;Fr;w;Rechtswissenschaft;ja\n"
+    )
+    assert ergebnis.ok, ergebnis.fehler
+    b = session.exec(select(Bewerber).where(Bewerber.import_key == "BW-1")).one()
+    assert b.ruecksteller_kennzeichen is True
+
+    ergebnis = importer.bewerbende_importieren(
+        session, session.jahrgang_id, kopf + "BW-2;Beispiel;Ben;Sa;m;Rechtswissenschaft;vielleicht\n"
+    )
+    assert any(f.spalte == "ruecksteller" for f in ergebnis.fehler)
+
+
 def test_bewerber_import_fehlende_pflichtspalte(session):
     ergebnis = importer.bewerbende_importieren(
         session, session.jahrgang_id, "bewerber_id;nachname\nBW-1;Muster\n"

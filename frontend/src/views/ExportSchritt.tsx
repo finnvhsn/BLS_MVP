@@ -100,17 +100,35 @@ export function ExportSchritt({ jahrgangId }: { jahrgangId: number }) {
           <p className="hinweis">
             Laufzettel je Bewerber:in und Prüfer:in sowie Raumschilder — jeweils
             aus dem aktuellen Planungsstand, nach Neuberechnung einfach neu erzeugen.
+            „Ansehen" öffnet die Vorschau im Browser, „Speichern" legt die
+            PDF-Datei direkt ab.
           </p>
-          <div className="zeile">
-            <a href={`/api/jahrgaenge/${jahrgangId}/druck/laufzettel-bewerbende`} target="_blank" rel="noreferrer">
-              <button className="sekundaer" disabled={staende.length === 0}>Laufzettel Bewerbende</button>
-            </a>
-            <a href={`/api/jahrgaenge/${jahrgangId}/druck/laufzettel-pruefende`} target="_blank" rel="noreferrer">
-              <button className="sekundaer" disabled={staende.length === 0}>Laufzettel Prüfende</button>
-            </a>
-            <a href={`/api/jahrgaenge/${jahrgangId}/druck/raumschilder`} target="_blank" rel="noreferrer">
-              <button className="sekundaer" disabled={staende.length === 0}>Raumschilder</button>
-            </a>
+          <div className="feldgruppe">
+            {([
+              ["laufzettel-bewerbende", "Laufzettel Bewerbende"],
+              ["laufzettel-pruefende", "Laufzettel Prüfende"],
+              ["raumschilder", "Raumschilder"],
+            ] as const).map(([art, beschriftung]) => (
+              <div className="feld" key={art}>
+                <span>{beschriftung}</span>
+                <div className="zeile">
+                  <a
+                    href={`/api/jahrgaenge/${jahrgangId}/druck/${art}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <button className="klein sekundaer" disabled={staende.length === 0}>
+                      Ansehen
+                    </button>
+                  </a>
+                  <a href={`/api/jahrgaenge/${jahrgangId}/druck/${art}?download=1`}>
+                    <button className="klein sekundaer" disabled={staende.length === 0}>
+                      Speichern
+                    </button>
+                  </a>
+                </div>
+              </div>
+            ))}
           </div>
 
           <h3>Datensicherung</h3>

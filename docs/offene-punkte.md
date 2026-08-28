@@ -1,69 +1,153 @@
-# Offene Punkte
+# Projektstand & offene Punkte
 
-Stand **2026-08-26**. Alle Änderungen dieser Sitzung sind im Code, die
-Verifikation ist aber **unvollständig**. Diese Liste zuerst abarbeiten.
+Stand **2026-08-27**, Ende der zweiten Arbeitsrunde. Alle Änderungen sind im
+Code, die Suite ist grün (`88 passed, 2 deselected`, 186 s), das Frontend
+gebaut. Der Dev-Server ist heruntergefahren.
 
-## 1. Verifikation nachholen (blockiert die Abnahme)
+Offen ist genau ein fachlicher Punkt — die Mindestpause für **Prüfende** —, er
+ist auf Wunsch zurückgestellt, damit das System vorführbar bleibt.
 
-### 1.1 Backend-Suite erneut laufen lassen
+## 1. Was steht
 
-```bash
-cd backend && ../.venv/bin/python -m pytest      # erwartet: 73 passed
-```
+### 1.1 Verifikation nachgeholt (war der Rückstand vom 26.08.)
 
-Der letzte grüne Lauf (73 passed, 187 s) war **vor** dem Fix der
-Planungsstand-Versionierung in [`backend/app/api/planung.py`](../backend/app/api/planung.py)
-(`_naechste_version`, Tiebreak `id.desc()` in `_letzter_planungsstand`).
-Dieser Fix ist noch durch keinen Test gelaufen.
+- Backend-Suite auf dem unveränderten Stand: `73 passed` — der Fix der
+  Planungsstand-Versionierung übersteht die Bestandssuite.
+- **Gegenprobe der Mindestpause** aus den gespeicherten Ständen des Jahrgangs
+  2028 ausgewertet statt neu gemessen; beide Läufe lagen bereits vor, beide mit
+  `neuberechnung: false` (erben also keinen Bestand, W6 hält nichts fest):
 
-### 1.2 Gegenprobe der Mindestpause
+  | Stand | `mindestpause_min` | Übergänge | kleinste Lücke | Null-Lücken | Status | Laufzeit |
+  |---|---|---|---|---|---|---|
+  | v1 | 15 | 393 | 15 min | 0 | gueltig, 0 Konflikte | 187 s |
+  | v2 | 0 | 393 | 0 min | 297 | gueltig, 0 Konflikte | 196 s |
 
-Der Lauf mit `mindestpause_min = 15` ist **bestanden**: 393 Übergänge,
-**0 Null-Lücken** (vorher 467 von 786), `solver_status = gueltig`, 0 Konflikte,
-244 s gegenüber ~190 s zuvor.
+  Der Nachweis steht seither als Test im Code
+  (`test_mindestpause_zwischen_allen_terminen` in
+  [`backend/tests/test_m3_solver.py`](../backend/tests/test_m3_solver.py)) —
+  deterministisch, in Sekunden, und über H10 im Regelkatalog gegen künftige
+  Drift abgesichert. Er hängt damit nicht mehr an den Messdaten, die beim Leeren
+  des Jahrgangs 2028 entfallen sind.
 
-Offen ist die Gegenprobe mit `mindestpause_min = 0`, die das alte Verhalten
-reproduzieren muss. Sie schlug zweimal scheinbar fehl — beide Male wegen
-Messfehlern, nicht wegen des Features. Wer sie wiederholt, muss zwei Fallen
-kennen:
+### 1.2 Versionierung der Planungsstände
 
-- **`POST /berechnen` hat `neuberechnung: true` als Default.** Ohne
-  `{"neuberechnung": false}` erbt der Lauf den vorigen Planungsstand, und W6
-  (Gewicht 1000) hält dessen Zeiten fest — die Gegenprobe wiederholt dann nur
-  die alte Lösung.
-- **Danach prüfen, welchen Stand `GET /plan` liefert** (Feld
-  `planungsstand.id`), sonst wertet man womöglich den Vorgänger aus.
+Der Fix vom 26.08. saß nur in `planung.py`.
+[`druck.py`](../backend/app/api/druck.py) und
+[`export.py`](../backend/app/api/export.py) ermittelten „den letzten Stand"
+jeweils selbst — ohne den `id.desc()`-Zweitschlüssel — und liefen weiter in
+genau den Fehler, der Kontrolle, Export und Druck auseinanderlaufen ließ. Alle
+drei Wege nutzen jetzt `letzter_planungsstand` / `stand_laden` aus
+[`jahrgaenge.py`](../backend/app/api/jahrgaenge.py); Versionen vergibt allein
+`naechste_version`, auch bei der Umbuchung. Nebenbefund mit behoben: `druck.py`
+prüfte als einziger Endpunkt nicht, ob ein übergebener `stand_id` zum Jahrgang
+gehört — ein fremder Plan war druckbar.
 
-Prüfkriterien: kein Übergang unter `mindestpause_min`, `solver_status` bleibt
-`gueltig` (nicht `relaxiert`), Laufzeit im Rahmen von ~250 s.
+### 1.3 Mindestpause als harte Regel (H10)
 
-## 2. Entscheidungen, die noch zu treffen sind
+Zwischen zwei Terminen derselben bewerbenden Person liegt mindestens die
+konfigurierte Wegzeit, vor jedem Format derselbe Wert. Solver und Validator
+lesen **dieselbe** Zahl (`zeitmodell.mindestpause_min`), sodass Constraint und
+Prüfung nicht auseinanderlaufen können. Eine manuelle Umbuchung, die die Pause
+unterschreitet, wird nur nach ausdrücklicher Bestätigung übernommen (F_OM_016).
 
-- **`puffer_min = 10` ist wirkungslos.** In allen gespeicherten Konfigurationen
-  steht 10; die Belegungsprüfung läuft auf dem 15-Minuten-Raster (`RASTER_MIN`),
-  ein Vorlauf von 10 fällt zwischen zwei Rasterpunkte und blockiert nichts.
-  Entweder auf 15 setzen (wird wirksam, **verändert bestehende Pläne**) oder auf
-  0 (ehrlich abgeschaltet). Nicht ungefragt geändert.
-  Ein Raster-Validator auf `puffer_min` ist **keine** Option: er würde das Laden
-  aller Bestandsjahrgänge mit HTTP 500 quittieren.
-- **Mindestpause bei manueller Umbuchung.** Der Solver hält sie ein, ein
-  Handeingriff in Schritt 4 kann sie unterlaufen, ohne dass ein Konflikt
-  erscheint. Sauber wäre sie als Regel in
-  [`backend/app/core/rules.py`](../backend/app/core/rules.py) — dann zeigen
-  allerdings alle Bestandspläne schlagartig hunderte Konflikte. Bewusst
-  ausgeklammert, weil das eine fachliche Entscheidung ist.
-- **`ruecksteller` bleibt Pflichtspalte** beim Import, obwohl das Kennzeichen von
-  keiner Regel ausgewertet wird (siehe [formats.md](formats.md)). Optional machen
-  (fehlend ⇒ `nein`) würde handgebaute Test-CSVs erleichtern.
-- **Jahrgang 2028** enthält Testdaten (262/87/34/15) und Planungsstände aus den
-  Messläufen. Bei Bedarf über „Import zurücksetzen" leeren.
+Der Wert muss ein Vielfaches von 15 sein und wird sonst mit einer deutschen
+Meldung abgelehnt — siehe die 10-Minuten-Frage unter Punkt 2.
 
-## 3. Behobener Bestandsfehler — Hintergrund
+### 1.4 Kleinere Korrekturen aus der Testphase
 
-`version = (bestand_stand.version + 1) if bestand_stand else 1` vergab bei jeder
-**Vollberechnung** erneut die Version 1, weil dort kein Bestand geerbt wird. Ein
-Jahrgang konnte so mehrere Stände mit derselben Nummer haben, und
-`_letzter_planungsstand` sortierte nur nach `version.desc()` ohne Zweitschlüssel
-— welcher Stand „der aktuelle Plan" ist, hing damit von der Sortierreihenfolge
-der Datenbank ab. Kontrolle, Export und Druck konnten einen veralteten Plan
-zeigen. Behoben, siehe 1.1 zur ausstehenden Absicherung.
+- **`puffer_min` ersatzlos entfallen.** Der Vorbereitungspuffer vor
+  Gruppenformaten war nur oberhalb der Mindestpause überhaupt sichtbar. In
+  gespeicherten Konfigurationen steht der Schlüssel weiter und wird beim Laden
+  ignoriert — geprüft an Bestandsdaten.
+- **W5 zieht jetzt die Mindestpause ab** statt des Puffers. Sie fällt zwischen
+  jedem Terminpaar unvermeidbar an; als Kennzahl bleibt die Zeit übrig, die sich
+  durch bessere Planung noch einsparen ließe. Die ausgewiesenen Wartezeiten
+  fallen dadurch niedriger aus als in älteren Ständen.
+- **`ruecksteller` ist optionale Importspalte** (fehlend ⇒ `nein`). Ein Wert
+  außerhalb von `ja`/`nein` bleibt ein Fehler.
+- **Jahrgänge lassen sich im Frontend löschen** (Kopfzeile, mit Rückfrage, die
+  aufzählt was verschwindet). Der Endpunkt gab es schon, es fehlte der Weg.
+- **Eingabefelder in Schritt 2 stehen bündig.** Ursache war `align-items: center`
+  aus der `label`-Regel, das `.feld` nicht überschrieb — in einer
+  Spalten-Flexbox ist das die waagerechte Achse, jedes Feld saß also mittig
+  unter seinem unterschiedlich breiten Label.
+- **Druckerzeugnisse haben einen Speichern-Link** (`?download=1` ⇒
+  `Content-Disposition: attachment`) neben der Vorschau. Es waren immer schon
+  echte PDFs; es fehlte nur der Direkt-Download.
+- **Der Umbuchungsdialog** trägt nur noch den Formatnamen statt
+  „Umbuchung: <Format>".
+
+### 1.5 Testdaten
+
+[`testdaten/demo-klein/`](../testdaten/demo-klein/) (48 Bewerbende, 29 Zusagen,
+19 Prüfende, 10 Räume — für Vorführungen, mit Schrittbudget 15 s in unter einer
+Minute gerechnet) und [`testdaten/realistisch/`](../testdaten/realistisch/)
+(262/87/34/15, das reale Mengengerüst, ~3 min). Je vier CSV in der
+Importreihenfolge.
+
+## 2. Offen
+
+### 2.1 Prüfende haben keine Mindestpause (zurückgestellt)
+
+Der Solver erzwingt die Wegzeit nur für Bewerbende; Prüfende wechseln aber
+genauso den Raum. Der Weg ist untersucht und steht fest:
+
+- **Phase B** (`solver.py`) belegt je Zeitscheibe über
+  `e.start <= tick < e.start + e.dauer`. Das Fenster muss um die Pause nach vorn
+  wachsen — dieselbe Vorlauf-Semantik wie in Phase A, **ohne eine einzige neue
+  Variable**, nur zusätzliche `AddAtMostOne` auf den bestehenden ~10.000
+  Booleans.
+- **Prüferkapazität in Phase A** zählt `occ(i, tick)` ohne Vorlauf. Bliebe sie
+  so, gäbe Phase A Zeitpläne frei, die Phase B nicht mehr besetzen kann.
+- **Vorab-Diagnose** rechnet den Senior-Bedarf mit `e.dauer` und müsste auf
+  `e.dauer + pause` gehen, sonst meldet sie Machbarkeit, die es nicht gibt.
+- **Neue Relaxierungsstufe:** Ist ein Tag mit Pause nicht besetzbar, fällt
+  zuerst die Pause — vor der bestehenden Lockerung von H1/H3. Eine
+  unterschrittene Wegzeit ist ein organisatorisches Ärgernis, eine
+  Doppelbegegnung ein Verfahrensfehler.
+- **Regel H10** gruppiert bisher nur nach `(bewerber_id, tag)` und bekäme
+  `(pruefer_id, tag)` dazu.
+
+Vor der Umsetzung gehört eine Vorher-/Nachher-Messung auf dem realen
+Mengengerüst dazu. Referenzwert vorher: 414 s für beide Volllasttests.
+
+### 2.2 Mindestpause von 10 Minuten
+
+Mit dem 15-Minuten-Raster nicht darstellbar: Startzeiten und Formatdauern
+(30/45/150) sind Vielfache von 15, erreichbare Lücken damit 0, 15, 30 … Eine 10
+verböte exakt dasselbe wie eine 15 und erlaubte exakt dasselbe — der Plan wäre
+identisch, die Oberfläche zeigte eine Zahl, die er nicht abbildet. Deshalb wird
+sie abgelehnt statt still gerundet.
+
+Echte 10 Minuten bräuchten ein **5-Minuten-Raster**; ein 10er scheidet aus, weil
+die Gruppenarbeit 45 Minuten dauert. Erste Messung (kompakte Instanz, 120
+Bewerbende, 20 s Schrittbudget, ohne Prüfenden-Pause):
+
+| Konfiguration | Ergebnis | Laufzeit | Relaxierung |
+|---|---|---|---|
+| Raster 15 / Pause 15 (heute) | gültig, 0 Konflikte | 42,9 s | — |
+| Raster 5 / Pause 10 | gültig, 0 Konflikte | 45,3 s | — |
+| Raster 5 / Pause 15 | gültig, 0 Konflikte | 66,1 s | ja |
+
+Das feinere Raster kostet **nicht** die erwartete Rechenzeit — das Schrittbudget
+deckelt jede Phase ohnehin. Der Preis zeigt sich als Lockerung. Die Entscheidung
+braucht noch eine Messung am realen Mengengerüst, sinnvollerweise zusammen mit
+2.1.
+
+### 2.3 Kleineres
+
+- **Kein Unique-Constraint auf `(jahrgang_id, version)`.** Wäre die saubere
+  Absicherung gegen Versionskollisionen, verlangt aber eine Datenmigration.
+  Abgedeckt durch den `id.desc()`-Zweitschlüssel und eine einzige Vergabestelle.
+- **Toter Zweig in `solver.berechnen`:** `elif relaxiert: status = "gueltig"`
+  liefert dasselbe wie der Normalfall. „relaxiert" entsteht ausschließlich über
+  Validator-Konflikte. Kosmetik, aber irreführend zu lesen.
+
+## 3. Stand der Dev-Datenbank
+
+`backend/data/bls.db` enthält nach der Testphase zwei Jahrgänge: **Testjahrgang**
+(id 3, 262 Bewerbende / 87 Prüfende / 42 Räume, ein Planungsstand v1) und einen
+leeren **2027** (id 4). Die früheren Jahrgänge 2027 und 2028 sind über den neuen
+Löschen-Knopf entfernt worden. Eine Sicherung des Standes von vor dem Aufräumen
+liegt im Sitzungs-Scratchpad (`$TMPDIR/bls_backup/`) und überlebt den nächsten
+Neustart nicht.

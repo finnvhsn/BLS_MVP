@@ -58,11 +58,10 @@ class Zeitmodell(BaseModel):
 
     tag_start: str = "10:00"
     tag_ende: str = "17:15"
-    # Vorbereitungspuffer vor dem Gruppenvortrag (Kaffeepause als informelle
-    # Vorbereitungszeit) — wirkt nur vor Gruppenformaten.
-    puffer_min: int = Field(default=15, ge=0)
     # Mindestpause zwischen zwei Terminen derselben Person: Wegzeit für den
-    # Raumwechsel. Gilt für ALLE Formate, auch für Einzelgespräche.
+    # Raumwechsel. Gilt für ALLE Formate und für Bewerbende wie Prüfende — ein
+    # eigener Vorbereitungspuffer vor Gruppenformaten hat sich damit erledigt
+    # (er wäre nur oberhalb dieser Pause überhaupt sichtbar geworden).
     mindestpause_min: int = Field(default=15, ge=0)
 
     @field_validator("mindestpause_min")
@@ -71,10 +70,6 @@ class Zeitmodell(BaseModel):
         """Belegungen werden auf dem RASTER_MIN-Raster geprüft; ein Wert
         dazwischen fiele zwischen zwei Rasterpunkte und bliebe wirkungslos,
         ohne dass es auffiele. Lieber hier ablehnen als still nichts tun.
-
-        Bewusst NICHT auf ``puffer_min`` angewandt: dort existieren gespeicherte
-        Konfigurationen mit rasterfremden Werten (z. B. 10), die sonst beim Laden
-        scheitern würden. Solche Werte bleiben wirkungslos — siehe docs/regeln.md.
         """
         if v % RASTER_MIN:
             raise ValueError(
@@ -190,6 +185,7 @@ class JahrgangsKonfiguration(BaseModel):
             if f.key == key:
                 return f
         raise KeyError(f"Unbekanntes Format: {key!r}")
+
 
 
 def standard_formate() -> list[FormatKonfiguration]:

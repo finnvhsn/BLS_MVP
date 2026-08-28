@@ -126,8 +126,11 @@ def _ja_nein(wert: str, spalte: str, zeile: int, fehler: list[ImportFehler],
 # Bewerbende (F_OM_001)
 # ---------------------------------------------------------------------------
 
-BEWERBER_PFLICHTSPALTEN = ["bewerber_id", "nachname", "tag", "geschlecht", "studiengang", "ruecksteller"]
-BEWERBER_OPTIONALE_SPALTEN = ["vorname", "rangfolge", "rueckmeldestatus", "zugelassen"]
+BEWERBER_PFLICHTSPALTEN = ["bewerber_id", "nachname", "tag", "geschlecht", "studiengang"]
+# ruecksteller ist optional (fehlend ⇒ nein): das Kennzeichen wird importiert und
+# mitgeführt, aber von keiner Regel ausgewertet — als Pflichtspalte hätte es nur
+# handgebaute CSVs erschwert. Siehe docs/formats.md.
+BEWERBER_OPTIONALE_SPALTEN = ["vorname", "ruecksteller", "rangfolge", "rueckmeldestatus", "zugelassen"]
 
 
 def bewerbende_importieren(session: Session, jahrgang_id: int, daten: bytes | str) -> ImportErgebnis:
@@ -180,7 +183,8 @@ def bewerbende_importieren(session: Session, jahrgang_id: int, daten: bytes | st
         if not studiengang:
             fehler.append(ImportFehler(i, "studiengang", "Pflichtfeld ist leer."))
 
-        ruecksteller = _ja_nein(zeile.get("ruecksteller", ""), "ruecksteller", i, fehler)
+        ruecksteller = _ja_nein(zeile.get("ruecksteller", ""), "ruecksteller", i, fehler,
+                                default=False)
         zugelassen = _ja_nein(zeile.get("zugelassen", "ja"), "zugelassen", i, fehler, default=True)
 
         rangfolge: int | None = None

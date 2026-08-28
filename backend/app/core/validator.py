@@ -10,7 +10,7 @@ from .rules import HARTE_REGELN, Konflikt
 
 
 def plan_validieren(plan: Plan, kontext: PlanKontext) -> list[Konflikt]:
-    """Vollständige Prüfung aller harten Regeln H1–H9. Reihenfolge = Katalog."""
+    """Vollständige Prüfung aller harten Regeln H1–H10. Reihenfolge = Katalog."""
     konflikte: list[Konflikt] = []
     for regel in HARTE_REGELN.values():
         konflikte.extend(regel.pruefen(plan, kontext))

@@ -1,0 +1,49 @@
+bewerber_id;nachname;vorname;tag;geschlecht;studiengang;ruecksteller;rangfolge;rueckmeldestatus;zugelassen
+BW-0001;Wolf;Sophie;Fr;w;Rechtswissenschaft;nein;1;Zusage;ja
+BW-0002;Peters;Felix;Sa;m;Rechtswissenschaft;nein;2;Zusage;ja
+BW-0003;Koch;Mia;Fr;w;Rechtswissenschaft;nein;3;Zusage;ja
+BW-0004;Schulz;Ben;Sa;m;Recht und Wirtschaft;nein;4;Absage;ja
+BW-0005;Sommer;Vincent;Fr;m;Rechtswissenschaft;nein;5;Zusage;ja
+BW-0006;Becker;Ben;Sa;m;Rechtswissenschaft;nein;6;Zusage;ja
+BW-0007;Krause;Mia;Fr;w;Recht und Wirtschaft;nein;7;Zusage;ja
+BW-0008;Otte;Jonas;Sa;m;Rechtswissenschaft;nein;8;Zusage;ja
+BW-0009;Schmidt;Lukas;Fr;m;Recht und Wirtschaft;nein;9;Absage;ja
+BW-0010;Winkler;Julius;Sa;m;Rechtswissenschaft;nein;10;Zusage;ja
+BW-0011;Ludwig;Emilia;Fr;w;Rechtswissenschaft;nein;11;Zusage;ja
+BW-0012;Thiele;Anna;Sa;w;Rechtswissenschaft;nein;12;Zusage;ja
+BW-0013;Lorenz;Moritz;Fr;m;Rechtswissenschaft;nein;13;Absage;ja
+BW-0014;Wolf;Hannah;Sa;w;Rechtswissenschaft;nein;14;Absage;ja
+BW-0015;Maier;Anna;Fr;w;Rechtswissenschaft;nein;15;Absage;ja
+BW-0016;Ahrens;Emilia;Sa;w;Recht und Wirtschaft;nein;16;Zusage;ja
+BW-0017;Hartmann;Sophie;Fr;w;Rechtswissenschaft;nein;17;Zusage;ja
+BW-0018;Maier;Emil;Sa;m;Rechtswissenschaft;nein;18;Absage;ja
+BW-0019;Ahrens;Hannah;Fr;w;Recht und Wirtschaft;nein;19;Zusage;ja
+BW-0020;Bachmann;Jonas;Sa;m;Rechtswissenschaft;nein;20;Zusage;ja
+BW-0021;Dietrich;Theo;Fr;m;Rechtswissenschaft;nein;21;Zusage;ja
+BW-0022;Wolf;Anna;Sa;w;Recht und Wirtschaft;nein;22;Offen;ja
+BW-0023;Busch;Clara;Fr;w;Rechtswissenschaft;nein;23;Zusage;ja
+BW-0024;Lehmann;David;Sa;d;Rechtswissenschaft;nein;24;Absage;ja
+BW-0025;Fischer;Theo;Fr;m;Rechtswissenschaft;nein;25;Absage;ja
+BW-0026;Seidel;Ida;Sa;w;Rechtswissenschaft;nein;26;Zusage;ja
+BW-0027;Hartmann;Paul;Fr;m;Rechtswissenschaft;nein;27;Absage;ja
+BW-0028;Maier;Clara;Sa;w;Rechtswissenschaft;nein;28;Zusage;ja
+BW-0029;Jansen;Jakob;Fr;m;Rechtswissenschaft;nein;29;Absage;ja
+BW-0030;Otte;Viktoria;Sa;w;Rechtswissenschaft;nein;30;Zusage;ja
+BW-0031;Fischer;Carl;Fr;m;Rechtswissenschaft;nein;31;Zusage;ja
+BW-0032;Brandt;Vincent;Sa;m;Recht und Wirtschaft;nein;32;Zusage;ja
+BW-0033;Brandt;Anna;Fr;w;Rechtswissenschaft;nein;33;Zusage;ja
+BW-0034;Klein;Greta;Sa;w;Rechtswissenschaft;nein;34;Zusage;ja
+BW-0035;Fischer;Lena;Fr;w;Recht und Wirtschaft;nein;35;Absage;ja
+BW-0036;Schröder;Noah;Sa;m;Rechtswissenschaft;nein;36;Absage;ja
+BW-0037;Lange;Moritz;Fr;m;Recht und Wirtschaft;nein;37;Absage;ja
+BW-0038;Neumann;Clara;Sa;w;Rechtswissenschaft;nein;38;Zusage;ja
+BW-0039;Brandt;Clara;Fr;w;Rechtswissenschaft;nein;39;Zusage;ja
+BW-0040;Krüger;Frieda;Sa;w;Rechtswissenschaft;nein;40;Zusage;ja
+BW-0041;Bachmann;Lukas;Fr;m;Rechtswissenschaft;nein;41;Absage;ja
+BW-0042;Lorenz;Leon;Sa;m;Rechtswissenschaft;nein;42;Offen;ja
+BW-0043;Kaiser;Emilia;Fr;w;Rechtswissenschaft;nein;43;Absage;ja
+BW-0044;Möller;Theresa;Sa;w;Recht und Wirtschaft;nein;44;Zusage;ja
+BW-0045;Bachmann;Paula;Fr;w;Rechtswissenschaft;nein;45;Zusage;ja
+BW-0046;Otte;Emilia;Sa;w;Rechtswissenschaft;nein;46;Absage;ja
+BW-0047;Lehmann;Anna;Fr;w;Rechtswissenschaft;nein;47;Zusage;ja
+BW-0048;Winkler;Greta;Sa;w;Rechtswissenschaft;nein;48;Absage;ja

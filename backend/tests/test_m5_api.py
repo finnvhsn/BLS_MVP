@@ -159,6 +159,36 @@ def test_umbuchung_mit_live_validierung(client, jahrgang_id, berechnet):
     assert plan3["konflikte"] == []
 
 
+def test_umbuchung_meldet_unterschrittene_mindestpause(client, jahrgang_id, berechnet):
+    """H10 in der Live-Validierung: Der Solver hält die Wegzeit ein, ein
+    Handeingriff darf sie nicht unbemerkt unterlaufen (F_OM_016)."""
+    plan = client.get(f"/api/jahrgaenge/{jahrgang_id}/plan").json()
+    einzel = [z for z in plan["zuweisungen"] if z["format_typ"] == "einzel"]
+
+    # Zwei Termine derselben Person suchen und den späteren direkt an das Ende
+    # des früheren legen — 0 Minuten für den Raumwechsel.
+    z1 = einzel[0]
+    bewerber_id = z1["bewerber"][0]["id"]
+    eigene = sorted(
+        (z for z in plan["zuweisungen"] if any(b["id"] == bewerber_id for b in z["bewerber"])),
+        key=lambda z: z["start_min"],
+    )
+    vorher, nachher = eigene[0], eigene[1]
+
+    from app.core.konfiguration import hhmm
+
+    r = client.post(f"/api/jahrgaenge/{jahrgang_id}/umbuchen", json={
+        "zuweisung_id": nachher["id"], "start": hhmm(vorher["ende_min"]),
+    })
+    assert r.status_code == 200, r.text
+    antwort = r.json()
+    assert antwort["uebernommen"] is False
+    h10 = [k for k in antwort["konflikte"] if k["regel"] == "H10"]
+    assert h10, antwort["konflikte"]
+    assert h10[0]["titel"] == "Mindestpause zwischen Terminen"
+    assert "Raumwechsel" in h10[0]["meldung"]
+
+
 def test_planungsstaende_versioniert(client, jahrgang_id, berechnet):
     staende = client.get(f"/api/jahrgaenge/{jahrgang_id}/planungsstaende").json()
     versionen = [s["version"] for s in staende]
@@ -189,6 +219,106 @@ def test_gruppen_verschieben_haelt_tagesbindung(client, jahrgang_id, berechnet):
         "bewerber_id": fr["mitglieder"][0]["id"], "gruppe_id": fr2["id"],
     })
     assert r.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Versionierung der Planungsstände
+# ---------------------------------------------------------------------------
+
+def _stand_anlegen(jahrgang_id: int, version: int):
+    """Legt einen leeren Planungsstand direkt in der Datenbank an — die
+    Versionskollision, die dieser Abschnitt prüft, lässt sich über die API
+    nicht mehr herstellen."""
+    from sqlmodel import Session
+
+    from app.db.database import engine
+    from app.db.models import Planungsstand, PlanungsstandTyp
+
+    with Session(engine()) as session:
+        stand = Planungsstand(jahrgang_id=jahrgang_id, version=version,
+                              typ=PlanungsstandTyp.VOLLBERECHNUNG, seed=42,
+                              parameter={}, kennzahlen={}, konflikte=[])
+        session.add(stand)
+        session.commit()
+        session.refresh(stand)
+        return stand.id
+
+
+def test_naechste_version_zaehlt_ueber_vollberechnungen_weiter(client):
+    """Der Bestandsfehler: eine zweite Vollberechnung erbt keinen Stand und
+    bekam deshalb erneut die Version 1 — ein Jahrgang hatte dann mehrere
+    gleich nummerierte Stände."""
+    from sqlmodel import Session
+
+    from app.api.jahrgaenge import naechste_version
+    from app.db.database import engine
+
+    jid = client.post("/api/jahrgaenge", json={"bezeichnung": "Versionen"}).json()["id"]
+    with Session(engine()) as session:
+        assert naechste_version(session, jid) == 1
+    _stand_anlegen(jid, 1)
+    with Session(engine()) as session:
+        assert naechste_version(session, jid) == 2
+    _stand_anlegen(jid, 2)
+    _stand_anlegen(jid, 3)
+    with Session(engine()) as session:
+        assert naechste_version(session, jid) == 4
+
+
+def test_gleiche_version_alle_wege_zeigen_denselben_stand(client):
+    """Bei gleicher Versionsnummer entscheidet der jüngere Datensatz — und
+    zwar überall gleich. Vorher hatte jeder Endpunkt seine eigene Abfrage
+    ohne Zweitschlüssel, sodass Kontrolle, Export und Druck auseinanderlaufen
+    konnten."""
+    from sqlmodel import Session
+
+    from app.api.jahrgaenge import letzter_planungsstand
+    from app.db.database import engine
+    from app.db.models import ExportLauf
+
+    jid = client.post("/api/jahrgaenge", json={"bezeichnung": "Tiebreak"}).json()["id"]
+    alt = _stand_anlegen(jid, 1)
+    jung = _stand_anlegen(jid, 1)          # dieselbe Version, jüngerer Datensatz
+    assert jung > alt
+
+    with Session(engine()) as session:
+        assert letzter_planungsstand(session, jid).id == jung
+
+    plan = client.get(f"/api/jahrgaenge/{jid}/plan").json()
+    assert plan["planungsstand"]["id"] == jung
+
+    staende = client.get(f"/api/jahrgaenge/{jid}/planungsstaende").json()
+    assert staende[0]["id"] == jung
+
+    r = client.post(f"/api/jahrgaenge/{jid}/export")
+    assert r.status_code == 200, r.text
+    with Session(engine()) as session:
+        lauf = session.get(ExportLauf, r.json()["id"])
+        assert lauf.planungsstand_id == jung
+
+
+def test_druck_lehnt_fremden_planungsstand_ab(client, jahrgang_id, berechnet):
+    """Ein Stand aus einem anderen Jahrgang ist nicht druckbar — sonst ließe
+    sich über die stand_id ein fremder Plan ausgeben."""
+    fremd = client.post("/api/jahrgaenge", json={"bezeichnung": "Fremd"}).json()["id"]
+    fremder_stand = _stand_anlegen(fremd, 1)
+    r = client.get(f"/api/jahrgaenge/{jahrgang_id}/druck/raumschilder",
+                   params={"stand_id": fremder_stand})
+    assert r.status_code == 404
+
+
+def test_umbuchung_kollidiert_nicht_mit_der_versionsvergabe(client, jahrgang_id, berechnet):
+    """Auch die Umbuchung vergibt über dieselbe Stelle — der neue Stand liegt
+    über allen bestehenden Versionen des Jahrgangs."""
+    staende = client.get(f"/api/jahrgaenge/{jahrgang_id}/planungsstaende").json()
+    hoechste = max(s["version"] for s in staende)
+    plan = client.get(f"/api/jahrgaenge/{jahrgang_id}/plan").json()
+    z = plan["zuweisungen"][0]
+    r = client.post(f"/api/jahrgaenge/{jahrgang_id}/umbuchen", json={
+        "zuweisung_id": z["id"], "raum_id": z["raum_id"], "bestaetigt": True,
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["version"] == hoechste + 1
 
 
 def test_jahrgang_loeschen(client):
